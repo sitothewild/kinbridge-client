@@ -2081,10 +2081,46 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+/// KinBridge: hard-coded server + key + app-name baked into the build.
+/// Populates OVERWRITE_SETTINGS so the UI cannot repoint the app at
+/// RustDesk's public infrastructure (or anywhere else).
+///
+/// This runs after `load_custom_client()` so an explicit `custom.txt` can
+/// still override in dev builds.
+pub fn init_kinbridge_defaults() {
+    use hbb_common::config::{self, keys};
+
+    const RENDEZVOUS: &str = "192.168.68.54";
+    const KEY: &str = "WqooDze2t33XwECZ7swZG+2xAk7JL0b9rGqj3I4vzcw=";
+    const APP_NAME: &str = "KinBridge Support";
+
+    {
+        let mut overwrite = config::OVERWRITE_SETTINGS.write().unwrap();
+        overwrite.insert(
+            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
+            RENDEZVOUS.to_string(),
+        );
+        overwrite.insert(keys::OPTION_KEY.to_string(), KEY.to_string());
+    }
+    {
+        let mut defaults = config::DEFAULT_SETTINGS.write().unwrap();
+        defaults
+            .entry(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string())
+            .or_insert_with(|| RENDEZVOUS.to_string());
+        defaults
+            .entry(keys::OPTION_KEY.to_string())
+            .or_insert_with(|| KEY.to_string());
+    }
+    if config::APP_NAME.read().unwrap().as_str() == "RustDesk" {
+        *config::APP_NAME.write().unwrap() = APP_NAME.to_string();
+    }
+}
+
 pub fn load_custom_client() {
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
+        init_kinbridge_defaults();
         return;
     }
     let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
@@ -2101,6 +2137,9 @@ pub fn load_custom_client() {
         };
         read_custom_client(&data.trim());
     }
+    // KinBridge: always apply our defaults, whether or not custom.txt was
+    // present. OVERWRITE_SETTINGS beats any user-set value from the UI.
+    init_kinbridge_defaults();
 }
 
 fn read_custom_client_advanced_settings(

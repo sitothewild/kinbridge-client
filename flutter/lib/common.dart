@@ -250,18 +250,26 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
 class MyTheme {
   MyTheme._();
 
-  static const Color grayBg = Color(0xFFEFEFF2);
-  static const Color accent = Color(0xFF0071FF);
-  static const Color accent50 = Color(0x770071FF);
-  static const Color accent80 = Color(0xAA0071FF);
-  static const Color canvasColor = Color(0xFF212121);
-  static const Color border = Color(0xFFCCCCCC);
-  static const Color idColor = Color(0xFF00B6F0);
-  static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
-  static const Color cmIdColor = Color(0xFF21790B);
-  static const Color dark = Colors.black87;
-  static const Color button = Color(0xFF2C8CFF);
-  static const Color hoverBorder = Color(0xFF999999);
+  // KinBridge palette — sRGB approximations of the Lovable dashboard
+  // oklch tokens (see www.kinbridge.support CSS, extracted to tokens).
+  //   primary     oklch(70%  .14 55)   → warm amber
+  //   accent      oklch(70%  .07 150)  → sage green (maps to "success" too)
+  //   destructive oklch(68%  .16 22)   → soft coral (maps to cmIdColor's stop)
+  //   background  oklch(98.5%.012 80)  → warm cream
+  //   foreground  oklch(22%  .04 50)   → dark warm brown
+  //   border      oklch(90%  .018 70)  → soft cream border
+  static const Color grayBg = Color(0xFFF3EEE5);          // warm muted cream
+  static const Color accent = Color(0xFFE89652);          // primary amber
+  static const Color accent50 = Color(0x77E89652);        // 47% alpha
+  static const Color accent80 = Color(0xAAE89652);        // 67% alpha
+  static const Color canvasColor = Color(0xFF2A1F16);     // dark warm brown
+  static const Color border = Color(0xFFE8DDC9);          // cream border
+  static const Color idColor = Color(0xFFB87C3A);         // deeper amber for IDs
+  static const Color darkGray = Color.fromARGB(255, 148, 140, 130);
+  static const Color cmIdColor = Color(0xFF8FB89B);       // sage green
+  static const Color dark = Color(0xFF3B2B1F);            // warm dark text
+  static const Color button = Color(0xFFE89652);          // amber button
+  static const Color hoverBorder = Color(0xFFC2A77F);
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
@@ -454,7 +462,10 @@ class MyTheme {
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: Colors.blue, secondary: accent, background: grayBg),
+        // KinBridge: warm-amber primary (not Flutter default Colors.blue).
+        primary: accent,
+        secondary: accent80,
+        background: grayBg),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -562,9 +573,10 @@ class MyTheme {
         style: MenuStyle(
             backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
     colorScheme: ColorScheme.dark(
-      primary: Colors.blue,
-      secondary: accent,
-      background: Color(0xFF24252B),
+      // KinBridge: warm-amber primary on dark theme too. Darker warm background.
+      primary: accent,
+      secondary: accent80,
+      background: Color(0xFF241A12),
     ),
     popupMenuTheme: PopupMenuThemeData(
         shape: RoundedRectangleBorder(
@@ -1140,8 +1152,9 @@ Widget createDialogContent(String text) {
     }
     spans.add(TextSpan(
       text: match.group(0) ?? '',
-      style: const TextStyle(
-        color: Colors.blue,
+      // KinBridge: inline link color — warm amber, not Colors.blue.
+      style: TextStyle(
+        color: MyTheme.accent,
         decoration: TextDecoration.underline,
       ),
       recognizer: TapGestureRecognizer()
@@ -1270,7 +1283,8 @@ Color? _msgboxColor(String type) {
   if (type.contains("error") || type == "re-input-password") {
     return Color(0xFFE04F5F);
   }
-  return Color(0xFF2C8CFF);
+  // KinBridge: default msgbox accent uses our warm amber, not RustDesk's blue.
+  return MyTheme.accent;
 }
 
 Widget msgboxIcon(String type) {

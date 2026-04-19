@@ -443,12 +443,13 @@ class _CmHeaderState extends State<_CmHeader>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
+        // KinBridge: warm-amber gradient (matches the website hero).
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
           colors: [
-            Color(0xff00bfe1),
-            Color(0xff0071ff),
+            Color(0xFFF2B379),
+            Color(0xFFE89652),
           ],
         ),
       ),

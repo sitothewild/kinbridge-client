@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#ffffff</color>
+    <!-- KinBridge: warm amber primary, for the adaptive-icon background layer.
+         Approximates the oklch(70% .14 55) primary from the Lovable dashboard. -->
+    <color name="ic_launcher_background">#E89652</color>
+    <!-- KinBridge: warm cream background for the Flutter splash. Approximates
+         the oklch(98.5% .012 80) background token. -->
+    <color name="splash_background">#FAF6F0</color>
 </resources>

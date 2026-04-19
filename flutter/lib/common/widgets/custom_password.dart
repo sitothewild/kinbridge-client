@@ -118,12 +118,13 @@ class PasswordStrengthIndicator extends StatelessWidget {
   }
 
   Color _getColor(double strength) {
+    // KinBridge: password-strength ramp uses warm tokens, not Flutter Material defaults.
     if (strength < weakMedium) {
-      return Colors.yellow;
+      return const Color(0xFFE0B04D); // amber warning
     } else if (strength < mediumStrong) {
-      return Colors.blue;
+      return const Color(0xFFE89652); // primary amber
     } else {
-      return Colors.green;
+      return const Color(0xFF8FB89B); // sage success
     }
   }
 }

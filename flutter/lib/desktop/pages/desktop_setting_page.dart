@@ -1562,8 +1562,9 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 
   Widget network(BuildContext context) {
-    final hideServer =
-        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
+    // KinBridge: always hide the ID/Relay Server editor on desktop too. See
+    // the mirror comment in mobile/pages/settings_page.dart.
+    final hideServer = true;
     final hideProxy =
         isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     final hideWebSocket = isWeb ||
@@ -2389,22 +2390,34 @@ class _AboutState extends State<_About> {
                         .marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com/privacy.html');
-                  },
-                  child: Text(
-                    translate('Privacy Statement'),
-                    style: linkStyle,
-                  ).marginSymmetric(vertical: 4.0)),
-              InkWell(
-                  onTap: () {
-                    launchUrlString('https://rustdesk.com');
+                    launchUrlString('https://www.kinbridge.support/');
                   },
                   child: Text(
                     translate('Website'),
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
+              // AGPL-3.0 attribution: KinBridge Support is derived from
+              // rustdesk/rustdesk. Source for our modifications is public.
+              Padding(
+                padding: const EdgeInsets.only(top: 12.0),
+                child: Text(
+                  translate('powered_by_me'),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ),
+              InkWell(
+                  onTap: () {
+                    launchUrlString(
+                        'https://github.com/sitothewild/kinbridge-client');
+                  },
+                  child: Text(
+                    'Source (AGPL-3.0)',
+                    style: linkStyle.copyWith(
+                        fontSize: 12, color: Colors.grey[600]),
+                  ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                // KinBridge: copyright banner uses warm-amber, not RustDesk blue.
+                decoration: BoxDecoration(color: MyTheme.accent),
                 padding:
                     const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: SelectionArea(

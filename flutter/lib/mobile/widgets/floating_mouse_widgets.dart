@@ -27,7 +27,8 @@ const double _kLeftRightButtonHeight = 40;
 const double _kBorderWidth = 1;
 final Color _kDefaultBorderColor = Colors.white.withOpacity(0.7);
 final Color _kDefaultColor = Colors.black.withOpacity(0.4);
-final Color _kTapDownColor = Colors.blue.withOpacity(0.7);
+// KinBridge: tap-down indicator uses warm-amber primary, not Flutter default blue.
+final Color _kTapDownColor = const Color(0xFFE89652).withOpacity(0.7);
 final Color _kWidgetHighlightColor = Colors.white.withOpacity(0.9);
 const int _kInputTimerIntervalMillis = 100;
 

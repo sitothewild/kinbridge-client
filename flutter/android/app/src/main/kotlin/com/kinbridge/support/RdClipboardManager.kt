@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package com.kinbridge.support
 
 import java.nio.ByteBuffer
 import java.util.Timer

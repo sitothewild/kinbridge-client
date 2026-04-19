@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package com.kinbridge.support
 
 /**
  * Handle events from flutter

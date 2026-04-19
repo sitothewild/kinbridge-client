@@ -128,8 +128,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         bind.mainGetOptionSync(key: kOptionAllowAutoDisconnect));
     _autoDisconnectTimeout =
         bind.mainGetOptionSync(key: kOptionAutoDisconnectTimeout);
-    _hideServer =
-        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
+    // KinBridge: always hide the ID/Relay Server editor on mobile. The server
+    // is baked into the build; letting a paired device repoint itself at
+    // RustDesk's public infrastructure defeats the whole trust model.
+    _hideServer = true;
     _hideProxy = bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     _hideNetwork =
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
@@ -1090,16 +1092,37 @@ void showAbout(OverlayDialogManager dialogManager) {
         Text('Version: $version'),
         InkWell(
             onTap: () async {
-              const url = 'https://rustdesk.com/';
+              const url = 'https://www.kinbridge.support/';
               await launchUrl(Uri.parse(url));
             },
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('rustdesk.com',
+              child: Text('kinbridge.support',
                   style: TextStyle(
                     decoration: TextDecoration.underline,
                   )),
             )),
+        // AGPL-3.0 attribution. KinBridge Support is a downstream of
+        // rustdesk/rustdesk. Our modifications are public at the URL below
+        // as required by the license.
+        Padding(
+          padding: EdgeInsets.only(top: 16),
+          child: Text(
+            translate('powered_by_me'),
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ),
+        InkWell(
+            onTap: () async {
+              const url = 'https://github.com/sitothewild/kinbridge-client';
+              await launchUrl(Uri.parse(url));
+            },
+            child: Text('Source (AGPL-3.0)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  decoration: TextDecoration.underline,
+                ))),
       ]),
       actions: [],
     );
