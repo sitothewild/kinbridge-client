@@ -62,12 +62,18 @@ class KB {
 class KBText {
   KBText._();
 
+  // All KB text styles explicitly opt out of underline decoration; Flutter
+  // shows a debug underline on text that sits outside a Material/Scaffold
+  // ancestor otherwise, and our onboarding pages use plain Containers.
+  static const TextDecoration _none = TextDecoration.none;
+
   // Display — used sparingly, only on onboarding hero
   static TextStyle display({Color color = KB.deepInk}) => GoogleFonts.fraunces(
         fontSize: 48,
         color: color,
         fontWeight: FontWeight.w500,
         height: 1.05,
+        decoration: _none,
       );
 
   // Title — screen titles, big greetings ("Hi, Mom 🦋")
@@ -76,6 +82,7 @@ class KBText {
         color: color,
         fontWeight: FontWeight.w500,
         height: 1.1,
+        decoration: _none,
       );
 
   // Heading — card headlines ("Need a hand?")
@@ -84,6 +91,7 @@ class KBText {
         color: color,
         fontWeight: FontWeight.w500,
         height: 1.2,
+        decoration: _none,
       );
 
   // Modal / success titles ("You're connected with Mom")
@@ -93,6 +101,7 @@ class KBText {
         color: color,
         fontWeight: FontWeight.w600,
         height: 1.2,
+        decoration: _none,
       );
 
   // Body — main paragraph copy, descriptions
@@ -100,6 +109,7 @@ class KBText {
         fontSize: 15,
         color: color,
         height: 1.45,
+        decoration: _none,
       );
 
   // Label — buttons, UI labels ("Ask for help")
@@ -107,6 +117,7 @@ class KBText {
         fontSize: 15,
         color: color,
         fontWeight: FontWeight.w600,
+        decoration: _none,
       );
 
   // Caption — timestamps, metadata ("32 seconds ago")
@@ -114,6 +125,7 @@ class KBText {
         fontSize: 12,
         color: color,
         height: 1.3,
+        decoration: _none,
       );
 
   // Overline — section eyebrows ("GOOD AFTERNOON", "RECENT HELPERS")
@@ -122,5 +134,6 @@ class KBText {
         color: color,
         fontWeight: FontWeight.w700,
         letterSpacing: 2.0,
+        decoration: _none,
       );
 }

@@ -5,6 +5,7 @@ import 'package:flutter_hbb/web/settings_page.dart';
 import 'package:get/get.dart';
 import '../../common.dart';
 import '../../common/widgets/chat_page.dart';
+import '../../kinbridge/onboarding/onboarding_flow.dart';
 import '../../kinbridge/shell/kb_shell.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
@@ -60,21 +61,33 @@ class HomePageState extends State<HomePage> {
     _pages.add(SettingsPage());
   }
 
+  bool _onboardingDone =
+      bind.mainGetLocalOption(key: kKbOnboardingDone) == "Y";
+  KBRole _role =
+      bind.mainGetLocalOption(key: kKbRole) == "helper"
+          ? KBRole.helper
+          : KBRole.owner;
+
   @override
   Widget build(BuildContext context) {
-    // KinBridge: the mobile home is now the KBShell from spec page 7 (warm
-    // palette, Fraunces + Manrope, Home / Devices / History / Settings nav).
-    // The legacy RustDesk tab pages (ConnectionPage, ChatPage, ServerPage)
-    // are still reachable in-process — ChatPage mounts on demand when a live
-    // session is running, ServerPage logic runs headless under MainService,
-    // ConnectionPage is replaced by the new owner/helper home views.
-    //
-    // Role is hard-coded to owner today. Phase III adds a first-launch role
-    // picker + persistence. Phase V reads it from Supabase user_roles.
+    // KinBridge: first launch -> run the 3-screen onboarding flow (spec
+    // pages 4-6) plus role picker. Persisted via RustDesk's local-options
+    // store (mainSetLocalOption) so we don't add a shared_preferences dep.
+    // Returning users drop straight into the KBShell.
+    if (!_onboardingDone) {
+      return OnboardingFlow(
+        onComplete: (role) {
+          setState(() {
+            _onboardingDone = true;
+            _role = role;
+          });
+        },
+      );
+    }
     return WillPopScope(
       onWillPop: () async => true,
       child: KBShell(
-        role: KBRole.owner,
+        role: _role,
         settingsPage: SettingsPage(),
       ),
     );
