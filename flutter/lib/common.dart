@@ -9,6 +9,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
@@ -250,25 +251,43 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
 class MyTheme {
   MyTheme._();
 
-  // KinBridge palette — sRGB approximations of the Lovable dashboard
-  // oklch tokens (see www.kinbridge.support CSS, extracted to tokens).
-  //   primary     oklch(70%  .14 55)   → warm amber
-  //   accent      oklch(70%  .07 150)  → sage green (maps to "success" too)
-  //   destructive oklch(68%  .16 22)   → soft coral (maps to cmIdColor's stop)
-  //   background  oklch(98.5%.012 80)  → warm cream
-  //   foreground  oklch(22%  .04 50)   → dark warm brown
-  //   border      oklch(90%  .018 70)  → soft cream border
-  static const Color grayBg = Color(0xFFF3EEE5);          // warm muted cream
-  static const Color accent = Color(0xFFE89652);          // primary amber
-  static const Color accent50 = Color(0x77E89652);        // 47% alpha
-  static const Color accent80 = Color(0xAAE89652);        // 67% alpha
-  static const Color canvasColor = Color(0xFF2A1F16);     // dark warm brown
-  static const Color border = Color(0xFFE8DDC9);          // cream border
+  // KinBridge palette — verbatim hex values from the Android Spec PDF,
+  // page 2 (see D:\KinBridge\spec-pages\page-02.png).
+  //   Parchment  #FBF7EE  app background
+  //   Surface    #FFFFFF  card surface
+  //   Amber      #E59A4D  primary action
+  //   AmberGlow  #F2B670  gradient stop
+  //   Sage       #8FB58A  online / positive
+  //   Coral      #E89A8A  alerts / soft
+  //   DeepInk    #3A2E22  primary text
+  //   Muted      #8A7A66  secondary text
+  //   Hairline   #EFE4D2  dividers
+  //
+  // The legacy names (`accent`, `grayBg`, `cmIdColor`, etc.) are kept
+  // throughout the RustDesk codebase; we remap them to KinBridge hues here
+  // so we don't have to rewrite every call site.
+  static const Color kbParchment = Color(0xFFFBF7EE);
+  static const Color kbSurface = Color(0xFFFFFFFF);
+  static const Color kbAmber = Color(0xFFE59A4D);
+  static const Color kbAmberGlow = Color(0xFFF2B670);
+  static const Color kbSage = Color(0xFF8FB58A);
+  static const Color kbCoral = Color(0xFFE89A8A);
+  static const Color kbDeepInk = Color(0xFF3A2E22);
+  static const Color kbMuted = Color(0xFF8A7A66);
+  static const Color kbHairline = Color(0xFFEFE4D2);
+
+  // Legacy aliases expected by RustDesk widgets — point them at KinBridge tokens.
+  static const Color grayBg = kbParchment;                // warm app bg
+  static const Color accent = kbAmber;                    // primary amber
+  static const Color accent50 = Color(0x77E59A4D);        // 47% alpha amber
+  static const Color accent80 = Color(0xAAE59A4D);        // 67% alpha amber
+  static const Color canvasColor = kbDeepInk;
+  static const Color border = kbHairline;
   static const Color idColor = Color(0xFFB87C3A);         // deeper amber for IDs
-  static const Color darkGray = Color.fromARGB(255, 148, 140, 130);
-  static const Color cmIdColor = Color(0xFF8FB89B);       // sage green
-  static const Color dark = Color(0xFF3B2B1F);            // warm dark text
-  static const Color button = Color(0xFFE89652);          // amber button
+  static const Color darkGray = kbMuted;
+  static const Color cmIdColor = kbSage;                  // online-positive tint
+  static const Color dark = kbDeepInk;
+  static const Color button = kbAmber;
   static const Color hoverBorder = Color(0xFFC2A77F);
 
   // ListTile
@@ -379,13 +398,42 @@ class MyTheme {
     }),
   );
 
+  // KinBridge Fraunces display + Manrope body, loaded via google_fonts.
+  // Uppercase Manrope "tracked" style is built ad-hoc at call sites.
+  static TextTheme get kbTextTheme => GoogleFonts.manropeTextTheme().copyWith(
+        displayLarge: GoogleFonts.fraunces(
+            fontSize: 96, color: kbDeepInk, fontWeight: FontWeight.w500),
+        displayMedium: GoogleFonts.fraunces(
+            fontSize: 60, color: kbDeepInk, fontWeight: FontWeight.w500),
+        displaySmall: GoogleFonts.fraunces(
+            fontSize: 48, color: kbDeepInk, fontWeight: FontWeight.w500),
+        headlineLarge: GoogleFonts.fraunces(
+            fontSize: 36, color: kbDeepInk, fontWeight: FontWeight.w500),
+        headlineMedium: GoogleFonts.fraunces(
+            fontSize: 28, color: kbDeepInk, fontWeight: FontWeight.w500),
+        headlineSmall: GoogleFonts.fraunces(
+            fontSize: 24, color: kbDeepInk, fontWeight: FontWeight.w500),
+        titleLarge: GoogleFonts.fraunces(
+            fontSize: 22, color: kbDeepInk, fontWeight: FontWeight.w500),
+        titleMedium: GoogleFonts.manrope(
+            fontSize: 16, color: kbDeepInk, fontWeight: FontWeight.w600),
+        bodyLarge: GoogleFonts.manrope(fontSize: 18, color: kbDeepInk),
+        bodyMedium: GoogleFonts.manrope(fontSize: 15, color: kbDeepInk),
+        bodySmall: GoogleFonts.manrope(fontSize: 13, color: kbMuted),
+        labelLarge: GoogleFonts.manrope(
+            fontSize: 16, color: kbDeepInk, fontWeight: FontWeight.w600),
+        labelMedium: GoogleFonts.manrope(fontSize: 14, color: kbDeepInk),
+        labelSmall: GoogleFonts.manrope(
+            fontSize: 12, color: kbMuted, letterSpacing: 1.2),
+      );
+
   static ThemeData lightTheme = ThemeData(
     // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
     useMaterial3: false,
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
-    scaffoldBackgroundColor: Colors.white,
-    dialogBackgroundColor: Colors.white,
+    scaffoldBackgroundColor: kbParchment,
+    dialogBackgroundColor: kbSurface,
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
@@ -410,14 +458,9 @@ class MyTheme {
             ),
           )
         : null,
-    textTheme: const TextTheme(
-        titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
-        titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
-        bodySmall: TextStyle(fontSize: 12, color: Colors.black87, height: 1.25),
-        bodyMedium:
-            TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
-        labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
-    cardColor: grayBg,
+    // KinBridge: Fraunces (display serif) + Manrope (body sans) per spec.
+    textTheme: kbTextTheme,
+    cardColor: kbSurface,
     hintColor: Color(0xFFAAAAAA),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(

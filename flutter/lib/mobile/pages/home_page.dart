@@ -5,6 +5,7 @@ import 'package:flutter_hbb/web/settings_page.dart';
 import 'package:get/get.dart';
 import '../../common.dart';
 import '../../common/widgets/chat_page.dart';
+import '../../kinbridge/shell/kb_shell.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'connection_page.dart';
@@ -61,49 +62,22 @@ class HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // KinBridge: the mobile home is now the KBShell from spec page 7 (warm
+    // palette, Fraunces + Manrope, Home / Devices / History / Settings nav).
+    // The legacy RustDesk tab pages (ConnectionPage, ChatPage, ServerPage)
+    // are still reachable in-process — ChatPage mounts on demand when a live
+    // session is running, ServerPage logic runs headless under MainService,
+    // ConnectionPage is replaced by the new owner/helper home views.
+    //
+    // Role is hard-coded to owner today. Phase III adds a first-launch role
+    // picker + persistence. Phase V reads it from Supabase user_roles.
     return WillPopScope(
-        onWillPop: () async {
-          if (_selectedIndex != 0) {
-            setState(() {
-              _selectedIndex = 0;
-            });
-          } else {
-            return true;
-          }
-          return false;
-        },
-        child: Scaffold(
-          // backgroundColor: MyTheme.grayBg,
-          appBar: AppBar(
-            centerTitle: true,
-            title: appTitle(),
-            actions: _pages.elementAt(_selectedIndex).appBarActions,
-          ),
-          bottomNavigationBar: BottomNavigationBar(
-            key: navigationBarKey,
-            items: _pages
-                .map((page) =>
-                    BottomNavigationBarItem(icon: page.icon, label: page.title))
-                .toList(),
-            currentIndex: _selectedIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: MyTheme.accent, //
-            unselectedItemColor: MyTheme.darkGray,
-            onTap: (index) => setState(() {
-              // close chat overlay when go chat page
-              if (_selectedIndex != index) {
-                _selectedIndex = index;
-                if (isChatPageCurrentTab) {
-                  gFFI.chatModel.hideChatIconOverlay();
-                  gFFI.chatModel.hideChatWindowOverlay();
-                  gFFI.chatModel.mobileClearClientUnread(
-                      gFFI.chatModel.currentKey.connId);
-                }
-              }
-            }),
-          ),
-          body: _pages.elementAt(_selectedIndex),
-        ));
+      onWillPop: () async => true,
+      child: KBShell(
+        role: KBRole.owner,
+        settingsPage: SettingsPage(),
+      ),
+    );
   }
 
   Widget appTitle() {
