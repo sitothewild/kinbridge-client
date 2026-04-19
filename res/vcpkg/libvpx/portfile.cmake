@@ -11,6 +11,15 @@ vcpkg_from_github(
         0004-remove-library-suffixes.patch
 )
 
+# KinBridge: GitHub archive tarballs ship with CRLF line endings which make
+# bash/dash trip on configure and configure.sh. Strip CR on non-Windows hosts.
+if(NOT VCPKG_HOST_IS_WINDOWS)
+    execute_process(
+        COMMAND bash -c "find . -type f \\( -name 'configure*' -o -name '*.sh' -o -name '*.mak' -o -name 'Makefile*' \\) -exec sed -i 's/\\r$//' {} +"
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+    )
+endif()
+
 if(CMAKE_HOST_WIN32)
     vcpkg_acquire_msys(MSYS_ROOT PACKAGES make perl)
     set(ENV{PATH} "${MSYS_ROOT}/usr/bin;$ENV{PATH}")

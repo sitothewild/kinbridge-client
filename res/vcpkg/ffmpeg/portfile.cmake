@@ -34,6 +34,22 @@ if(SOURCE_PATH MATCHES " ")
     message(FATAL_ERROR "Error: ffmpeg will not build with spaces in the path. Please use a directory with no spaces")
 endif()
 
+# KinBridge: strip CRLF from configure + shell scripts. The GitHub tarball
+# for ffmpeg n7.1 ships with Windows line endings, which makes bash (and
+# especially dash via /bin/sh) barf on configure:~4845 (msvc_common_flags).
+# Safe to run unconditionally on Linux/macOS; harmless on Windows.
+if(NOT VCPKG_HOST_IS_WINDOWS)
+    message(STATUS "KinBridge: normalising line endings in ffmpeg source (CRLF -> LF)")
+    execute_process(
+        COMMAND bash -c "find . -type f \\( -name configure -o -name '*.sh' -o -name '*.mak' -o -name 'Makefile*' \\) -print0 | xargs -0 sed -i 's/\\r$//'"
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+        RESULT_VARIABLE _kinbridge_eol_rv
+    )
+    if(NOT _kinbridge_eol_rv EQUAL 0)
+        message(FATAL_ERROR "KinBridge line-ending normalisation failed (exit ${_kinbridge_eol_rv})")
+    endif()
+endif()
+
 if(NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "wasm32")
     vcpkg_find_acquire_program(NASM)
     get_filename_component(NASM_EXE_PATH "${NASM}" DIRECTORY)

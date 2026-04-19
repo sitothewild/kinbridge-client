@@ -18,6 +18,15 @@ vcpkg_from_github(
         ${MISSING_CSTDINT_IMPORT_PATCH}
 )
 
+# KinBridge: GitHub archive tarballs ship with CRLF line endings which make
+# bash/dash trip on configure and shell scripts. Strip CR on non-Windows hosts.
+if(NOT VCPKG_HOST_IS_WINDOWS)
+    execute_process(
+        COMMAND bash -c "find . -type f \\( -name 'configure*' -o -name '*.sh' -o -name '*.mak' -o -name 'Makefile*' \\) -exec sed -i 's/\\r$//' {} +"
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+    )
+endif()
+
 if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
     vcpkg_cmake_configure(
         SOURCE_PATH "${SOURCE_PATH}" 

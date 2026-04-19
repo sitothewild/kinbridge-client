@@ -7,6 +7,15 @@ vcpkg_from_github(
     PATCHES fix-pkgconfig-version.patch
 )
 
+# KinBridge: GitHub archive tarballs ship with CRLF line endings which make
+# bash/dash trip on configure and shell scripts. Strip CR on non-Windows hosts.
+if(NOT VCPKG_HOST_IS_WINDOWS)
+    execute_process(
+        COMMAND bash -c "find . -type f \\( -name 'configure*' -o -name '*.sh' -o -name '*.mak' -o -name 'Makefile*' \\) -exec sed -i 's/\\r$//' {} +"
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+    )
+endif()
+
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     FEATURES
         avx2 AVX2_SUPPORTED
