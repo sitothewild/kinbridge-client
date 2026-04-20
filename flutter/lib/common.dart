@@ -3753,22 +3753,18 @@ Widget loadPowered(BuildContext context) {
   if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
     return SizedBox.shrink();
   }
-  return MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      onTap: () {
-        launchUrl(Uri.parse('https://kinbridge.support'));
-      },
-      child: Opacity(
-          opacity: 0.5,
-          child: Text(
-            translate("powered_by_me"),
-            overflow: TextOverflow.clip,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
-          )),
+  // KinBridge: attribution text is kept (AGPL-3.0 §5(a) "prominent
+  // notices stating that you modified it"), but not clickable — we do
+  // not want any tap target in the APK to lead to a rustdesk.com URL.
+  return Opacity(
+    opacity: 0.5,
+    child: Text(
+      translate("powered_by_me"),
+      overflow: TextOverflow.clip,
+      style: Theme.of(context)
+          .textTheme
+          .bodySmall
+          ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
     ),
   ).marginOnly(top: 6);
 }
