@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
+name = "kinbridge"
 version = "1.4.6"
 authors = ["KinBridge <support@kinbridge.support>"]
 edition = "2021"
 build= "build.rs"
 description = "KinBridge Support — family remote-help app (RustDesk-derived)"
-default-run = "rustdesk"
+default-run = "kinbridge"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "libkinbridge"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]

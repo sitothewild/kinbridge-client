@@ -1,28 +1,28 @@
-// kinbridge:// deep-link handler.
+// KinBridge deep-link handler — routes four URL shapes:
 //
-// Contract (matches the README §7 + kinbridge-api /sessions/start response):
+//   kinbridge://session/<id>?token=<jwt>   — helper joins a live session
+//   kinbridge://install?token=<64-hex>     — device claims an install token
+//   kinbridge://quickconnect?code=<6>      — helper redeems a 1-shot code
+//   https://kinbridge.support/invite/<tk>  — helper accepts a pairing invite
 //
-//   kinbridge://session/<sessionId>?token=<short-lived-jwt>
-//   kinbridge://session?token=<short-lived-jwt>
+// All four are dispatched by [KBDeepLink.tryHandle]. AndroidManifest
+// registers intent-filters for the three `kinbridge://` hosts and an App
+// Link verified filter for `https://kinbridge.support/invite/*`.
 //
-// The JWT embeds sid/owner/helper/device/hs_key claims (see
-// kinbridge-api/src/lib/kinbridge-token.ts). The APK validates the token only
-// as a sanity check — full verification happens when we talk to the API with
-// it. Today, Phase V-b, we just parse + navigate; when the HttpKBRepository
-// lands, resolveSession is called first to hydrate the peer.
-//
-// Week-2 infra: the Android intent-filter in AndroidManifest.xml routes the
-// scheme here; desktop uni_links on win/macos do the same.
+// Specs live in the kinbridgesupport repo's android-snippets/ — see
+//   INSTALL_TOKEN.md, QUICKCONNECT.md, HELPER_INVITE.md.
 
 import 'package:flutter/material.dart';
+
 import '../../common.dart' show globalKey;
 import '../data/kb_models.dart';
 import '../data/kb_repository.dart';
+import '../data/kb_server_fn.dart';
 import 'live_session_page.dart';
 
 // Reuses the existing RustDesk-side [globalKey] navigator so deep-link
-// pushes work from any app state (cold boot, background → foreground, or
-// already-at-home). No second navigator key needed.
+// pushes work from any app state (cold boot, background → foreground,
+// or already-at-home). No second navigator key needed.
 
 class KBDeepLink {
   KBDeepLink._();
@@ -31,27 +31,114 @@ class KBDeepLink {
   /// Caller (hooked into common.dart's handleUriLink) should short-circuit
   /// when this returns true so the RustDesk handler doesn't also fire.
   static bool tryHandle(Uri uri) {
-    if (uri.scheme != "kinbridge") return false;
-    if (uri.host != "session") {
-      debugPrint("kb: unknown kinbridge:// host '${uri.host}' — ignoring");
-      return false;
+    // Custom scheme flows.
+    if (uri.scheme == 'kinbridge') {
+      switch (uri.host) {
+        case 'session':
+          return _dispatchSession(uri);
+        case 'install':
+          return _dispatchInstall(uri);
+        case 'quickconnect':
+        case 'pair':
+          return _dispatchQuickConnect(uri);
+        default:
+          debugPrint("kb: unknown kinbridge:// host '${uri.host}' — ignoring");
+          return false;
+      }
     }
+    // Verified App Link: https://kinbridge.support/invite/<token>
+    if (uri.scheme == 'https' &&
+        uri.host == 'kinbridge.support' &&
+        uri.pathSegments.length >= 2 &&
+        uri.pathSegments.first == 'invite') {
+      return _dispatchInvite(uri.pathSegments[1]);
+    }
+    return false;
+  }
 
-    final token = uri.queryParameters["token"];
-    // Path shape: /<sessionId>  OR empty (fallback to token-embedded sid).
+  // ---------------------------------------------------------------------------
+  // session/<id>?token=<jwt>
+  // ---------------------------------------------------------------------------
+  static bool _dispatchSession(Uri uri) {
+    final token = uri.queryParameters['token'];
     String? sessionId;
     if (uri.pathSegments.isNotEmpty && uri.pathSegments.first.isNotEmpty) {
       sessionId = uri.pathSegments.first;
     }
-
     if (token == null || token.isEmpty) {
-      debugPrint("kb: kinbridge:// rejected — missing token");
-      return true; // still "handled" (we don't want rustdesk to re-handle)
+      debugPrint('kb: kinbridge://session rejected — missing token');
+      return true;
     }
-
     _openLiveSession(sessionId: sessionId, token: token);
     return true;
   }
+
+  // ---------------------------------------------------------------------------
+  // install?token=<64-hex>
+  // ---------------------------------------------------------------------------
+  static bool _dispatchInstall(Uri uri) {
+    final token = uri.queryParameters['token'];
+    if (token == null || token.isEmpty) {
+      debugPrint('kb: kinbridge://install rejected — missing token');
+      return true;
+    }
+    _pendingInstall = _PendingInstall(token: token);
+    _drainInstallIfReady();
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // quickconnect?code=<6>
+  // ---------------------------------------------------------------------------
+  static bool _dispatchQuickConnect(Uri uri) {
+    final code = uri.queryParameters['code'];
+    if (code == null || !RegExp(r'^\d{6}$').hasMatch(code)) {
+      debugPrint('kb: kinbridge://quickconnect rejected — bad code');
+      return true;
+    }
+    _pendingQuickConnect = _PendingQuickConnect(code: code);
+    _drainQuickConnectIfReady();
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // https://kinbridge.support/invite/<token>
+  // ---------------------------------------------------------------------------
+  static bool _dispatchInvite(String token) {
+    if (token.isEmpty) return false;
+    _pendingInvite = _PendingInvite(token: token);
+    _drainInviteIfReady();
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pending-link replay — cold-boot races
+  // ---------------------------------------------------------------------------
+
+  static _PendingLink? _pending;
+  static _PendingInstall? _pendingInstall;
+  static _PendingQuickConnect? _pendingQuickConnect;
+  static _PendingInvite? _pendingInvite;
+
+  /// Called by the KB shell after first build so any link that arrived
+  /// before the navigator was ready gets replayed.
+  static Future<void> drainPending() async {
+    final nav = globalKey.currentState;
+    if (nav == null) return;
+    final p = _pending;
+    if (p != null) {
+      _pending = null;
+      await _navigateIntoSession(nav,
+          sessionId: p.sessionId, token: p.token);
+    }
+    _drainInstallIfReady();
+    _drainQuickConnectIfReady();
+    _drainInviteIfReady();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session navigation
+  // ---------------------------------------------------------------------------
 
   static Future<void> _openLiveSession({
     String? sessionId,
@@ -59,25 +146,10 @@ class KBDeepLink {
   }) async {
     final nav = globalKey.currentState;
     if (nav == null) {
-      // Very early cold-boot: store and replay. In practice the KB shell is
-      // up by the time uni_links fires its cold-link, but defend in depth.
       _pending = _PendingLink(sessionId: sessionId, token: token);
       return;
     }
     await _navigateIntoSession(nav, sessionId: sessionId, token: token);
-  }
-
-  static _PendingLink? _pending;
-
-  /// Called by the KB shell after first build so any link that arrived
-  /// before the navigator was ready gets replayed.
-  static Future<void> drainPending() async {
-    final p = _pending;
-    if (p == null) return;
-    _pending = null;
-    final nav = globalKey.currentState;
-    if (nav == null) return;
-    await _navigateIntoSession(nav, sessionId: p.sessionId, token: p.token);
   }
 
   static Future<void> _navigateIntoSession(
@@ -85,39 +157,204 @@ class KBDeepLink {
     String? sessionId,
     required String token,
   }) async {
-    // Phase V-b: replace with
-    //   final peer = await (KBRepository.instance as HttpKBRepository)
-    //       .resolveSession(sessionId: sessionId, token: token);
-    // so we can render the real peer name/device and plumb token/hs_key into
-    // the Rust core before navigating.
     KBSession? session;
     if (sessionId != null) {
       try {
         session = await KBRepository.instance.getSession(sessionId);
       } catch (err) {
-        debugPrint("kb: getSession failed during deep-link: $err");
+        debugPrint('kb: getSession failed during deep-link: $err');
       }
     }
-    final peerName = session?.peerName ?? "your family";
+    final peerName = session?.peerName ?? 'your family';
     final peerInitials = session?.peerInitials ??
-        (peerName.isNotEmpty ? peerName.substring(0, 1).toUpperCase() : "?");
-    final peerDevice = session?.peerDevice;
-
+        (peerName.isNotEmpty ? peerName.substring(0, 1).toUpperCase() : '?');
     nav.push(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => LiveSessionPage(
           peerName: peerName,
           peerInitials: peerInitials,
-          peerDevice: peerDevice,
+          peerDevice: session?.peerDevice,
+          sessionId: sessionId,
         ),
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Install token
+  // ---------------------------------------------------------------------------
+
+  static void _drainInstallIfReady() {
+    final p = _pendingInstall;
+    final nav = globalKey.currentState;
+    if (p == null || nav == null) return;
+    _pendingInstall = null;
+    _redeemInstall(nav, p.token);
+  }
+
+  static Future<void> _redeemInstall(
+    NavigatorState nav,
+    String token,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(nav.context);
+    try {
+      final device = await KBServerFn.redeemInstallToken(token: token);
+      if (messenger != null) {
+        messenger.showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text("Device bound: ${device.name}"),
+          ),
+        );
+      }
+      debugPrint('kb.install: device=${device.id} owner=${device.ownerId}');
+      // TODO(beta.6 UI): push InstallCompletePage showing device name +
+      // "This phone is ready. Ask your family members to pair with you
+      // or send them an invite link."
+    } on KBServerFnError catch (err) {
+      debugPrint('kb.install: $err');
+      if (messenger != null) {
+        messenger.showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(_installErrorCopy(err.message)),
+        ));
+      }
+    }
+  }
+
+  static String _installErrorCopy(String raw) {
+    if (raw.contains('already used')) {
+      return "That install link was already used. Ask for a fresh one.";
+    }
+    if (raw.contains('revoked')) {
+      return "That install link was revoked. Ask the sender to send a new one.";
+    }
+    if (raw.contains('expired')) {
+      return "That install link expired. Ask for a new one.";
+    }
+    return "That install link didn't work. Ask the sender to check it.";
+  }
+
+  // ---------------------------------------------------------------------------
+  // QuickConnect
+  // ---------------------------------------------------------------------------
+
+  static void _drainQuickConnectIfReady() {
+    final p = _pendingQuickConnect;
+    final nav = globalKey.currentState;
+    if (p == null || nav == null) return;
+    _pendingQuickConnect = null;
+    _redeemQuickConnect(nav, p.code);
+  }
+
+  static Future<void> _redeemQuickConnect(
+    NavigatorState nav,
+    String code,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(nav.context);
+    try {
+      final result = await KBServerFn.redeemConnectionCode(code: code);
+      if (result.isQuickConnect && result.sessionId != null) {
+        final deviceName = result.deviceName;
+        nav.push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => LiveSessionPage(
+              peerName: deviceName,
+              peerInitials: deviceName.isNotEmpty
+                  ? deviceName.substring(0, 1).toUpperCase()
+                  : '?',
+              peerDevice: deviceName,
+              sessionId: result.sessionId,
+            ),
+          ),
+        );
+      } else if (result.isPairing) {
+        messenger?.showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+              "Pairing request sent. Waiting for ${result.deviceName}'s owner to approve."),
+        ));
+      }
+    } on KBServerFnError catch (err) {
+      debugPrint('kb.quickconnect: $err');
+      final msg = err.message.contains('expired')
+          ? "That code expired. Ask for a fresh one."
+          : err.message.contains('own device')
+              ? "You can't connect to your own device."
+              : "That code didn't work. Double-check the digits.";
+      messenger?.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(msg),
+      ));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helper invite
+  // ---------------------------------------------------------------------------
+
+  static void _drainInviteIfReady() {
+    final p = _pendingInvite;
+    final nav = globalKey.currentState;
+    if (p == null || nav == null) return;
+    _pendingInvite = null;
+    _handleInvite(nav, p.token);
+  }
+
+  static Future<void> _handleInvite(
+    NavigatorState nav,
+    String token,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(nav.context);
+    try {
+      final preview = await KBServerFn.lookupInvite(token: token);
+      if (!preview.valid) {
+        messenger?.showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(preview.friendlyReason),
+        ));
+        return;
+      }
+      final accept = await KBServerFn.acceptHelperInvite(token: token);
+      messenger?.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+            "You're now approved to help with ${preview.deviceName ?? 'this device'}."),
+      ));
+      debugPrint('kb.invite: pairing=${accept.pairingId} device=${accept.deviceId}');
+      // TODO(beta.6 UI): push a confirmation page showing device +
+      // inviter + an "Open Family" CTA landing on Helper Home.
+    } on KBServerFnError catch (err) {
+      debugPrint('kb.invite: $err');
+      messenger?.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(err.message.contains('own invite')
+            ? "You can't accept your own invite."
+            : "Couldn't accept that invite. Try opening the link again."),
+      ));
+    }
   }
 }
 
 class _PendingLink {
   _PendingLink({required this.sessionId, required this.token});
   final String? sessionId;
+  final String token;
+}
+
+class _PendingInstall {
+  _PendingInstall({required this.token});
+  final String token;
+}
+
+class _PendingQuickConnect {
+  _PendingQuickConnect({required this.code});
+  final String code;
+}
+
+class _PendingInvite {
+  _PendingInvite({required this.token});
   final String token;
 }

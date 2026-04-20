@@ -9,7 +9,7 @@ import com.kinbridge.support.RdClipboardManager
 
 object FFI {
     init {
-        System.loadLibrary("rustdesk")
+        System.loadLibrary("kinbridge")
     }
 
     external fun init(ctx: Context)

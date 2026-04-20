@@ -5,8 +5,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/desktop/widgets/menu_button.dart';
+import 'package:kinbridge_support/common.dart';
+import 'package:kinbridge_support/desktop/widgets/menu_button.dart';
 
 // Examples can assume:
 // enum Commands { heroAndScholar, hurricaneCame }

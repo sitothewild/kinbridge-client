@@ -6,8 +6,8 @@ import 'dart:ui' as ui;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/utils/relative_mouse_accumulator.dart';
+import 'package:kinbridge_support/main.dart';
+import 'package:kinbridge_support/utils/relative_mouse_accumulator.dart';
 import 'package:get/get.dart';
 
 import '../common.dart';

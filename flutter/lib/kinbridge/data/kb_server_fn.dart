@@ -35,6 +35,71 @@ class KBServerFnError implements Exception {
   String toString() => 'KBServerFnError($status): $message';
 }
 
+/// Shape returned by [KBServerFn.redeemConnectionCode]. Discriminate on
+/// [mode] — "pairing" means "show waiting-for-approval", "quickconnect"
+/// means "jump straight into LiveSessionPage(sessionId)".
+class KBRedeemCodeResult {
+  KBRedeemCodeResult({
+    required this.mode,
+    required this.sessionId,
+    required this.pairingId,
+    required this.quickconnectId,
+    required this.deviceName,
+  });
+  final String mode;
+  final String? sessionId;
+  final String? pairingId;
+  final String? quickconnectId;
+  final String deviceName;
+  bool get isQuickConnect => mode == 'quickconnect';
+  bool get isPairing => mode == 'pairing';
+}
+
+/// Lovable's `devices` row shape returned by [KBServerFn.redeemInstallToken].
+class KBDeviceRow {
+  KBDeviceRow({
+    required this.id,
+    required this.name,
+    required this.platform,
+    required this.ownerId,
+  });
+  final String id;
+  final String name;
+  final String platform;
+  final String ownerId;
+}
+
+/// Lightweight preview of an invite token. [valid] == true means the
+/// caller can proceed to [KBServerFn.acceptHelperInvite]. When false,
+/// [reason] is one of: `not_found`, `revoked`, `consumed`, `expired`.
+class KBInviteLookup {
+  KBInviteLookup({
+    required this.valid,
+    required this.reason,
+    required this.deviceName,
+    required this.inviterName,
+  });
+  final bool valid;
+  final String? reason;
+  final String? deviceName;
+  final String? inviterName;
+
+  String get friendlyReason {
+    switch (reason) {
+      case 'not_found':
+        return "That invite link doesn't exist. Double-check it with the person who sent it.";
+      case 'revoked':
+        return "The person who invited you cancelled this invite.";
+      case 'consumed':
+        return "This invite has already been used. Ask for a new link if you still need one.";
+      case 'expired':
+        return "This invite expired. Ask for a new one.";
+      default:
+        return "This invite isn't valid. Ask the inviter to send a new link.";
+    }
+  }
+}
+
 class KBServerFn {
   KBServerFn._();
 
@@ -133,14 +198,86 @@ class KBServerFn {
     );
   }
 
-  /// Helper-side: redeem the 6-digit code. Creates a `pending`
-  /// device_pairing. Owner still has to approve (and may need TOTP).
-  static Future<({String pairingId, String deviceName})>
-      redeemConnectionCode({required String code}) async {
+  /// Helper-side: redeem a 6-digit code. Server looks at the underlying
+  /// [connection_codes.mode] and returns one of two shapes:
+  ///
+  /// - **pairing** — creates a `pending` device_pairing, owner still has
+  ///   to approve (possibly with TOTP). UI: "Request sent, waiting for
+  ///   owner to approve."
+  /// - **quickconnect** — a one-shot support session that skips pairing
+  ///   entirely. Owner pre-consented by issuing the code, so a pre-
+  ///   approved [sessions] row + [quickconnect_sessions] audit row are
+  ///   created. UI: jump straight into LiveSessionPage(sessionId).
+  ///
+  /// See `android-snippets/QUICKCONNECT.md` for the full spec.
+  static Future<KBRedeemCodeResult> redeemConnectionCode({
+    required String code,
+  }) async {
     final r = await _post('redeemConnectionCode', {'code': code});
+    return KBRedeemCodeResult(
+      mode: r['mode'] as String? ?? 'pairing',
+      sessionId: r['sessionId'] as String?,
+      pairingId: r['pairingId'] as String?,
+      quickconnectId: r['quickconnectId'] as String?,
+      deviceName: (r['deviceName'] as String?) ?? 'device',
+    );
+  }
+
+  /// Owner-side (opt-in): end an active QuickConnect session.
+  /// See `android-snippets/QUICKCONNECT.md`. Either participant may call.
+  static Future<void> endQuickConnectSession({
+    required String quickconnectId,
+  }) async {
+    await _post(
+      'endQuickConnectSession',
+      {'quickconnectId': quickconnectId},
+    );
+  }
+
+  /// Redeem an install token (kinbridge://install?token=…). Called on
+  /// first launch when no local `device_id` is stored. Creates the
+  /// `devices` row bound to the token's original owner (not the caller's
+  /// auth.uid — that's stored in `consumed_by` for audit).
+  ///
+  /// See `android-snippets/INSTALL_TOKEN.md`.
+  static Future<KBDeviceRow> redeemInstallToken({
+    required String token,
+  }) async {
+    final r = await _post('redeemInstallToken', {'token': token});
+    // Lovable's server-fn response wraps the device in a `result` envelope.
+    final inner =
+        (r['result'] as Map<String, dynamic>?) ?? r;
+    final d = (inner['device'] as Map).cast<String, dynamic>();
+    return KBDeviceRow(
+      id: d['id'] as String,
+      name: d['name'] as String? ?? 'device',
+      platform: d['platform'] as String? ?? 'android',
+      ownerId: d['owner_id'] as String? ?? '',
+    );
+  }
+
+  /// Helper-side: accept an invite without consuming it. Used to render
+  /// the preview UI on `/invite/<token>` before the user taps Accept.
+  static Future<KBInviteLookup> lookupInvite({required String token}) async {
+    final r = await _post('lookupInvite', {'token': token});
+    return KBInviteLookup(
+      valid: (r['valid'] as bool?) ?? false,
+      reason: r['reason'] as String?,
+      deviceName: r['deviceName'] as String?,
+      inviterName: r['inviterName'] as String?,
+    );
+  }
+
+  /// Helper-side: consume an invite. Creates an **approved**
+  /// device_pairing row (owner pre-consented by issuing the invite — no
+  /// second round-trip). See `android-snippets/HELPER_INVITE.md`.
+  static Future<({String pairingId, String deviceId})> acceptHelperInvite({
+    required String token,
+  }) async {
+    final r = await _post('acceptHelperInvite', {'token': token});
     return (
       pairingId: r['pairingId'] as String,
-      deviceName: r['deviceName'] as String,
+      deviceId: r['deviceId'] as String,
     );
   }
 

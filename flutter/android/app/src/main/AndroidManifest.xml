@@ -72,15 +72,35 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- KinBridge session deep link: kinbridge://session/<id>?token=<jwt>
-                 Minted by kinbridge-api /api/sessions/start, tapped from
-                 the KinBridge Support dashboard notification or push. See
-                 lib/kinbridge/session/kb_deep_link.dart. -->
+            <!-- KinBridge custom-scheme deep links. All four are handled
+                 by lib/kinbridge/session/kb_deep_link.dart.
+                   kinbridge://session/<id>?token=<jwt>   — helper joins live session
+                   kinbridge://install?token=<64-hex>     — first-launch device bind
+                   kinbridge://quickconnect?code=<6>      — one-shot session code
+                   kinbridge://pair?code=<6>              — legacy alias for QuickConnect -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="kinbridge" android:host="session" />
+                <data android:scheme="kinbridge" android:host="install" />
+                <data android:scheme="kinbridge" android:host="quickconnect" />
+                <data android:scheme="kinbridge" android:host="pair" />
+            </intent-filter>
+
+            <!-- App Link for the helper-invite flow:
+                   https://kinbridge.support/invite/<token>
+                 Verified via /.well-known/assetlinks.json hosted on
+                 kinbridge.support (see android-snippets/HELPER_INVITE.md).
+                 autoVerify="true" turns this into a verified App Link so
+                 there's no chooser dialog when the user taps the link. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                      android:host="kinbridge.support"
+                      android:pathPrefix="/invite/" />
             </intent-filter>
         </activity>
 

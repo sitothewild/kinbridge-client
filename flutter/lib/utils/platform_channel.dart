@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/common.dart';
+import 'package:kinbridge_support/main.dart';
+import 'package:kinbridge_support/common.dart';
 
 enum SystemWindowTheme { light, dark }
 

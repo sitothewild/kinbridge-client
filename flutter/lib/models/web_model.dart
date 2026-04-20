@@ -8,11 +8,11 @@ import 'dart:html';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_hbb/common/widgets/login.dart';
-import 'package:flutter_hbb/models/state_model.dart';
+import 'package:kinbridge_support/common/widgets/login.dart';
+import 'package:kinbridge_support/models/state_model.dart';
 
-import 'package:flutter_hbb/web/bridge.dart';
-import 'package:flutter_hbb/common.dart';
+import 'package:kinbridge_support/web/bridge.dart';
+import 'package:kinbridge_support/common.dart';
 import 'package:uuid/uuid.dart';
 
 final List<StreamSubscription<MouseEvent>> mouseListeners = [];

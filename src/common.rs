@@ -1049,8 +1049,14 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
-    let url = url.to_ascii_lowercase();
-    url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
+    // KinBridge: the upstream `is_public` check asked "is this URL on
+    // rustdesk.com?" to decide when to trust a URL as the vendor's own.
+    // KinBridge has no such public cloud — every URL we legitimately
+    // handle is user-configured or points at kinbridge.support. Hard-code
+    // to false so no URL is ever treated as a trusted-public origin, and
+    // no rustdesk.com substring ships in the binary.
+    let _ = url;
+    false
 }
 
 pub fn get_udp_punch_enabled() -> bool {
@@ -2765,27 +2771,13 @@ mod tests {
 
     #[test]
     fn test_is_public() {
-        // Test URLs containing "rustdesk.com/"
-        assert!(is_public("https://rustdesk.com/"));
-        assert!(is_public("https://www.rustdesk.com/"));
-        assert!(is_public("https://api.rustdesk.com/v1"));
-        assert!(is_public("https://API.RUSTDESK.COM/v1"));
-        assert!(is_public("https://rustdesk.com/path"));
-
-        // Test URLs ending with "rustdesk.com"
-        assert!(is_public("rustdesk.com"));
-        assert!(is_public("https://rustdesk.com"));
-        assert!(is_public("https://RustDesk.com"));
-        assert!(is_public("http://www.rustdesk.com"));
-        assert!(is_public("https://api.rustdesk.com"));
-
-        // Test non-public URLs
+        // KinBridge: `is_public` is hard-coded to false (no trusted
+        // third-party cloud). Any URL must return false.
         assert!(!is_public("https://example.com"));
         assert!(!is_public("https://custom-server.com"));
         assert!(!is_public("http://192.168.1.1"));
         assert!(!is_public("localhost"));
-        assert!(!is_public("https://rustdesk.computer.com"));
-        assert!(!is_public("rustdesk.comhello.com"));
+        assert!(!is_public("https://kinbridge.support"));
     }
 
     #[test]

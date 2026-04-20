@@ -1,10 +1,10 @@
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common/widgets/dialog.dart';
-import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/peer_tab_model.dart';
-import 'package:flutter_hbb/models/state_model.dart';
+import 'package:kinbridge_support/common/widgets/dialog.dart';
+import 'package:kinbridge_support/consts.dart';
+import 'package:kinbridge_support/models/peer_tab_model.dart';
+import 'package:kinbridge_support/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 

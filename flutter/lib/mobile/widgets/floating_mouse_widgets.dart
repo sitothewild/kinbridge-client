@@ -9,11 +9,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/common/widgets/remote_input.dart';
-import 'package:flutter_hbb/models/input_model.dart';
-import 'package:flutter_hbb/models/model.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:kinbridge_support/common.dart';
+import 'package:kinbridge_support/common/widgets/remote_input.dart';
+import 'package:kinbridge_support/models/input_model.dart';
+import 'package:kinbridge_support/models/model.dart';
+import 'package:kinbridge_support/models/platform_model.dart';
 
 // Used for the wheel button and wheel scroll widgets
 const double _kSpaceToHorizontalEdge = 25;

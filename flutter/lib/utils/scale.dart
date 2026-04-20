@@ -1,5 +1,5 @@
-import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:kinbridge_support/consts.dart';
+import 'package:kinbridge_support/models/platform_model.dart';
 import 'package:uuid/uuid.dart';
 
 /// Clamp custom scale percent to supported bounds.

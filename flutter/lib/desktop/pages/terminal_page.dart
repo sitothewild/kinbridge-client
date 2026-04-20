@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/models/model.dart';
-import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:kinbridge_support/common.dart';
+import 'package:kinbridge_support/desktop/widgets/tabbar_widget.dart';
+import 'package:kinbridge_support/models/model.dart';
+import 'package:kinbridge_support/models/terminal_model.dart';
 import 'package:xterm/xterm.dart';
 import 'terminal_connection_manager.dart';
 

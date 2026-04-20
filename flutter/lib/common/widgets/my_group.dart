@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/hbbs/hbbs.dart';
-import 'package:flutter_hbb/common/widgets/login.dart';
-import 'package:flutter_hbb/common/widgets/peers_view.dart';
-import 'package:flutter_hbb/models/state_model.dart';
+import 'package:kinbridge_support/common/hbbs/hbbs.dart';
+import 'package:kinbridge_support/common/widgets/login.dart';
+import 'package:kinbridge_support/common/widgets/peers_view.dart';
+import 'package:kinbridge_support/models/state_model.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';

@@ -3,10 +3,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common/shared_state.dart';
-import 'package:flutter_hbb/common/widgets/toolbar.dart';
-import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:kinbridge_support/common/shared_state.dart';
+import 'package:kinbridge_support/common/widgets/toolbar.dart';
+import 'package:kinbridge_support/consts.dart';
+import 'package:kinbridge_support/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:get/get.dart';

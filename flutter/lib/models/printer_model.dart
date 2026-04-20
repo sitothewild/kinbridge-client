@@ -1,6 +1,6 @@
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:kinbridge_support/common.dart';
+import 'package:kinbridge_support/consts.dart';
+import 'package:kinbridge_support/models/platform_model.dart';
 
 class PrinterOptions {
   String action;
