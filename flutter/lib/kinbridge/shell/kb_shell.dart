@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../theme/kb_tokens.dart';
 import '../owner/owner_home_page.dart';
 import '../helper/helper_home_page.dart';
 import '../history/history_page.dart';
 import '../session/kb_deep_link.dart';
+import '../data/kb_supabase.dart';
 
 /// Runtime role. Phase V: hydrated from Supabase `user_roles`.
 /// Phase III: user picks on first launch, persisted in shared prefs.
@@ -34,6 +37,8 @@ class KBShell extends StatefulWidget {
 
 class _KBShellState extends State<KBShell> {
   int _tab = 0;
+  String? _realDisplayName;
+  StreamSubscription<Object?>? _profileSub;
 
   @override
   void initState() {
@@ -43,7 +48,37 @@ class _KBShellState extends State<KBShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       KBDeepLink.drainPending();
     });
+    _loadProfileName();
   }
+
+  @override
+  void dispose() {
+    _profileSub?.cancel();
+    super.dispose();
+  }
+
+  /// Pull display_name from the signed-in user's `profiles` row so the
+  /// greeting reads "Hi, Wilson 🦋" instead of the hardcoded "Hi, Mom".
+  /// Falls back to the static prop when signed out.
+  Future<void> _loadProfileName() async {
+    final uid = KBSupabase.userId;
+    if (uid == null) return;
+    try {
+      final row = await KBSupabase.client
+          .from('profiles')
+          .select('display_name')
+          .eq('id', uid)
+          .maybeSingle();
+      final name = (row?['display_name'] as String?)?.trim();
+      if (!mounted || name == null || name.isEmpty) return;
+      setState(() => _realDisplayName = name);
+    } catch (err) {
+      debugPrint('kb.shell: profile fetch failed: $err');
+    }
+  }
+
+  String get _ownerName => _realDisplayName ?? widget.ownerDisplayName;
+  String get _helperName => _realDisplayName ?? widget.helperDisplayName;
 
   late final List<_KBTab> _tabs = [
     _KBTab(
@@ -51,8 +86,8 @@ class _KBShellState extends State<KBShell> {
       activeIcon: Icons.home_rounded,
       label: "Home",
       build: () => widget.role == KBRole.owner
-          ? OwnerHomePage(displayName: widget.ownerDisplayName)
-          : HelperHomePage(displayName: widget.helperDisplayName),
+          ? OwnerHomePage(displayName: _ownerName)
+          : HelperHomePage(displayName: _helperName),
     ),
     _KBTab(
       icon: Icons.devices_other_outlined,

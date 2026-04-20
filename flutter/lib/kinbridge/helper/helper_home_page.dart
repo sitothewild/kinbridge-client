@@ -3,6 +3,8 @@ import '../theme/kb_tokens.dart';
 import '../widgets/kb_avatar.dart';
 import '../data/kb_models.dart';
 import '../data/kb_repository.dart';
+import '../data/kb_server_fn.dart';
+import '../data/kb_supabase.dart';
 import '../session/live_session_page.dart';
 import '../history/session_detail_page.dart';
 
@@ -147,26 +149,20 @@ class _FamilyList extends StatelessWidget {
   }
 }
 
-class _FamilyMemberTile extends StatelessWidget {
+class _FamilyMemberTile extends StatefulWidget {
   const _FamilyMemberTile({required this.device});
   final KBDevice device;
 
-  void _onAction(BuildContext context) {
-    if (device.online) {
-      // Placeholder entry point. Phase V-b: kinbridge://session/<id> deep
-      // link handler calls KinBridgeApi.resolveSession and navigates here
-      // with a real session id + peer pubkey.
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => LiveSessionPage(
-            peerName: device.ownerName,
-            peerInitials: device.ownerInitials,
-            peerDevice: device.name,
-          ),
-        ),
-      );
-    } else {
+  @override
+  State<_FamilyMemberTile> createState() => _FamilyMemberTileState();
+}
+
+class _FamilyMemberTileState extends State<_FamilyMemberTile> {
+  bool _starting = false;
+
+  Future<void> _onAction() async {
+    final device = widget.device;
+    if (!device.online) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: KB.deepInk,
@@ -177,15 +173,67 @@ class _FamilyMemberTile extends StatelessWidget {
           ),
         ),
       );
+      return;
     }
+
+    // Not signed in → demo-mode session (no real backend call).
+    if (KBSupabase.userId == null) {
+      _openLiveSession(sessionId: null);
+      return;
+    }
+
+    // Signed in → real session via TanStack startSession server-fn.
+    // Requires an approved device_pairing. RLS enforces that server-side;
+    // if the caller isn't approved, we surface the error string.
+    setState(() => _starting = true);
+    try {
+      final sid = await KBServerFn.startSession(deviceId: device.id);
+      if (!mounted) return;
+      _openLiveSession(sessionId: sid);
+    } on KBServerFnError catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: KB.deepInk,
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            err.message.contains('not approved')
+                ? "${device.ownerName} hasn't approved you as a helper yet."
+                : "Couldn't start the session. Try again.",
+            style: KBText.body(color: KB.parchment),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  void _openLiveSession({required String? sessionId}) {
+    final device = widget.device;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => LiveSessionPage(
+          peerName: device.ownerName,
+          peerInitials: device.ownerInitials,
+          peerDevice: device.name,
+          sessionId: sessionId,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final device = widget.device;
+    final String pillLabel = _starting
+        ? "Starting…"
+        : (device.online ? "Help now" : "Notify");
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _onAction(context),
+        onTap: _starting ? null : _onAction,
         borderRadius: BorderRadius.circular(KB.radiusField),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: KB.s2),
@@ -215,7 +263,7 @@ class _FamilyMemberTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(KB.radiusPill),
                 ),
                 child: Text(
-                  device.online ? "Help now" : "Notify",
+                  pillLabel,
                   style: KBText.label(
                       color: device.online ? KB.surface : KB.muted),
                 ),

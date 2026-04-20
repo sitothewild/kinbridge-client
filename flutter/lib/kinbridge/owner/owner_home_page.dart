@@ -3,6 +3,7 @@ import '../theme/kb_tokens.dart';
 import '../widgets/kb_avatar.dart';
 import '../data/kb_models.dart';
 import '../data/kb_repository.dart';
+import '../data/kb_supabase.dart';
 import '../history/session_detail_page.dart';
 
 /// Owner Home (spec page 7).
@@ -114,8 +115,171 @@ class _Greeting extends StatelessWidget {
   }
 }
 
-class _NeedAHandCard extends StatelessWidget {
+class _NeedAHandCard extends StatefulWidget {
   const _NeedAHandCard();
+
+  @override
+  State<_NeedAHandCard> createState() => _NeedAHandCardState();
+}
+
+class _NeedAHandCardState extends State<_NeedAHandCard> {
+  bool _busy = false;
+
+  Future<void> _onTap() async {
+    if (_busy) return;
+
+    // Not signed in → demo behaviour (unchanged snackbar).
+    if (KBSupabase.userId == null) {
+      _toast("Help request sent to your helpers.");
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final repo = KBRepository.instance;
+      final devices = await repo.listDevices();
+      final ownedDevices =
+          devices.where((d) => d.ownerName != 'Family member').toList();
+      // Fallback: if owner-filter returns nothing, accept any device the
+      // repo returned (RLS already restricts to caller's devices in the
+      // real repo impl).
+      final candidate = ownedDevices.isEmpty ? devices : ownedDevices;
+      if (candidate.isEmpty) {
+        _toast(
+            "Register a device first — open Devices to add this phone to your account.");
+        return;
+      }
+      final helpers = await repo.listHelpers();
+      if (helpers.isEmpty) {
+        _toast(
+            "You don't have any approved helpers yet. Invite someone from Devices → Helpers.");
+        return;
+      }
+
+      final device = candidate.firstWhere(
+        (d) => d.online,
+        orElse: () => candidate.first,
+      );
+
+      if (!mounted) return;
+      final helper = await _pickHelper(helpers);
+      if (helper == null) return;
+
+      await _sendHelpRequest(deviceId: device.id, helper: helper);
+      if (!mounted) return;
+      _toast("Help request sent to ${helper.name}.");
+    } catch (err) {
+      if (mounted) _toast("Couldn't send the request. Try again.");
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<KBHelper?> _pickHelper(List<KBHelper> helpers) {
+    return showModalBottomSheet<KBHelper>(
+      context: context,
+      backgroundColor: KB.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(KB.radiusCard)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(KB.s5, KB.s4, KB.s5, KB.s6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: KB.hairline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: KB.s4),
+              Text("Who can help?", style: KBText.heading()),
+              const SizedBox(height: KB.s2),
+              Text(
+                "Tap a helper to send them a request. They'll get a notification.",
+                style: KBText.body(color: KB.muted),
+              ),
+              const SizedBox(height: KB.s5),
+              for (final h in helpers)
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => Navigator.of(ctx).pop(h),
+                    borderRadius: BorderRadius.circular(KB.radiusField),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: KB.s2, vertical: KB.s3),
+                      child: Row(
+                        children: [
+                          KBAvatar(
+                            initials: h.initials,
+                            size: 40,
+                            online: h.online,
+                            tint: KB.amber,
+                          ),
+                          const SizedBox(width: KB.s4),
+                          Expanded(
+                            child: Text(h.name, style: KBText.label()),
+                          ),
+                          Text(
+                            h.online ? "online" : "offline",
+                            style: KBText.caption(
+                                color: h.online ? KB.sage : KB.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendHelpRequest({
+    required String deviceId,
+    required KBHelper helper,
+  }) async {
+    final client = KBSupabase.client;
+    final uid = KBSupabase.userId!;
+    // Insert a session row. RLS policy "Device owner creates sessions"
+    // gates this to device owners. The session starts in an un-approved
+    // state; the helper's side sees it via realtime + can approve/join.
+    final inserted = await client
+        .from('sessions')
+        .insert({'device_id': deviceId, 'helper_id': helper.id})
+        .select('id')
+        .single();
+    final sessionId = inserted['id'] as String;
+    // Log the help_requested event so it appears in the helper's dashboard
+    // and the session's timeline. RLS "Participants can append session
+    // events" permits it (owner is a participant).
+    await client.from('session_events').insert({
+      'session_id': sessionId,
+      'actor_id': uid,
+      'type': 'help_requested',
+      'payload': {'direction': 'owner_to_helper'},
+    });
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: KB.deepInk,
+        content: Text(message, style: KBText.body(color: KB.parchment)),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,19 +287,7 @@ class _NeedAHandCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(KB.radiusCard),
-        onTap: () {
-          // TODO(phase V-b): POST /api/help-requests via HttpKBRepository.
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: KB.deepInk,
-              content: Text(
-                "Help request sent to your helpers.",
-                style: KBText.body(color: KB.parchment),
-              ),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        },
+        onTap: _busy ? null : _onTap,
         child: Container(
           padding: const EdgeInsets.all(KB.s5),
           decoration: BoxDecoration(
