@@ -33,7 +33,8 @@ class SignInPage extends StatefulWidget {
   State<SignInPage> createState() => _SignInPageState();
 }
 
-class _SignInPageState extends State<SignInPage> {
+class _SignInPageState extends State<SignInPage>
+    with WidgetsBindingObserver {
   final _form = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -42,13 +43,23 @@ class _SignInPageState extends State<SignInPage> {
   bool _showPassword = false;
   String? _error;
   StreamSubscription<AuthState>? _authSub;
+  Timer? _googleTimeout;
+
+  /// Hard ceiling on how long we stay in "Opening Google…" state before
+  /// giving the user an escape hatch. In the happy path, the auth-state
+  /// listener OR the app-resume shortcut flips us out well before this.
+  /// This catches silent failures (PKCE verifier lost, code-exchange
+  /// error swallowed by the deep-link handler, etc).
+  static const _googleTimeoutDuration = Duration(seconds: 45);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Listen for auth-state changes that arrive via the PKCE
-    // kinbridge://auth-callback deep link (Google sign-in). When the
-    // session lands, hand off to [onSignedIn] just like email/password.
+    // https://kinbridge.support/auth-callback bounce → kinbridge://auth-callback
+    // deep link (Google sign-in). When the session lands, hand off to
+    // [onSignedIn] just like email/password.
     Future.microtask(() async {
       try {
         await KBSupabase.init();
@@ -60,10 +71,16 @@ class _SignInPageState extends State<SignInPage> {
           // active — otherwise we'd fire the callback on cold-boot
           // session restoration too.
           if (!_googleBusy) return;
-          final role = await _inferRole(user.id);
-          if (!mounted) return;
-          widget.onSignedIn(role);
+          await _handleGoogleSuccess(user.id);
         });
+        // If Supabase already had a signed-in session when we got here
+        // (hot-reload, warm sign-in), let the caller know immediately
+        // rather than forcing the user to tap Google again.
+        if (!mounted) return;
+        final current = KBSupabase.client.auth.currentUser;
+        if (current != null && _googleBusy) {
+          await _handleGoogleSuccess(current.id);
+        }
       } catch (_) {
         /* best-effort — still allows email/password sign-in */
       }
@@ -72,10 +89,34 @@ class _SignInPageState extends State<SignInPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _googleTimeout?.cancel();
     _authSub?.cancel();
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When the app returns from the external browser after the Google
+    // round-trip, the deep-link dispatcher has (hopefully) already run
+    // exchangeCodeForSession. Here we short-circuit the happy path:
+    // if a session actually landed, pop out even if the auth-state
+    // stream event raced past our listener-install microtask.
+    if (state != AppLifecycleState.resumed) return;
+    if (!_googleBusy || !mounted) return;
+    final user = KBSupabase.client.auth.currentUser;
+    if (user == null) return;
+    _handleGoogleSuccess(user.id);
+  }
+
+  Future<void> _handleGoogleSuccess(String userId) async {
+    if (!mounted || !_googleBusy) return;
+    _googleTimeout?.cancel();
+    final role = await _inferRole(userId);
+    if (!mounted) return;
+    widget.onSignedIn(role);
   }
 
   Future<void> _signInWithGoogle() async {
@@ -84,14 +125,27 @@ class _SignInPageState extends State<SignInPage> {
       _googleBusy = true;
       _error = null;
     });
+    // Belt-and-suspenders: if the deep link never comes back (PKCE
+    // verifier lost, bounce page misfired, user gave up in the
+    // browser), release the spinner so the user isn't trapped.
+    _googleTimeout?.cancel();
+    _googleTimeout = Timer(_googleTimeoutDuration, () {
+      if (!mounted || !_googleBusy) return;
+      setState(() {
+        _googleBusy = false;
+        _error = "Sign-in didn't finish. Try again or use email & password.";
+      });
+    });
     try {
       await KBSupabase.signInWithGoogle();
       // Google flow is async + browser-based. The auth-state listener
-      // installed in initState will fire onSignedIn when the session
-      // lands via the kinbridge://auth-callback deep link. Until then
-      // keep the spinner on.
+      // installed in initState OR the app-resume check in
+      // didChangeAppLifecycleState will fire onSignedIn when the
+      // session lands. Until then keep the spinner on; the timeout
+      // above is the ultimate safety net.
     } catch (err) {
       if (!mounted) return;
+      _googleTimeout?.cancel();
       setState(() {
         _googleBusy = false;
         _error = "Couldn't open Google sign-in. "

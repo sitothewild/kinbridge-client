@@ -110,22 +110,27 @@ class KBDeepLink {
   // auth-callback?code=<authcode>  — Supabase PKCE OAuth return
   // ---------------------------------------------------------------------------
   static bool _dispatchAuthCallback(Uri uri) {
+    debugPrint('kb.auth-callback: dispatch uri='
+        '${uri.toString().replaceAll(RegExp(r'code=[^&]+'), 'code=***')}');
     final code = uri.queryParameters['code'];
     if (code == null || code.isEmpty) {
-      debugPrint('kb: kinbridge://auth-callback rejected — missing code');
+      debugPrint(
+          'kb.auth-callback: rejected — missing code (params=${uri.queryParameters.keys.toList()})');
       return true;
     }
     // Exchange asynchronously; the auth-state listener on [KBSupabase]
-    // flips [KBRepository.instance] once the session lands. We don't
-    // need to navigate anywhere — the onboarding flow / SignInPage is
-    // still on screen, it will react to the auth-state change.
+    // flips [KBRepository.instance] once the session lands. SignInPage
+    // also reacts (directly + via its didChangeAppLifecycleState
+    // resume shortcut) so the user gets popped out of the spinner.
     _exchangeAuthCode(code);
     return true;
   }
 
   static Future<void> _exchangeAuthCode(String code) async {
+    debugPrint('kb.auth-callback: exchange start (code_len=${code.length})');
     try {
       await KBSupabase.completeOAuthCallback(code);
+      debugPrint('kb.auth-callback: exchange success — session established');
       final nav = globalKey.currentState;
       final messenger =
           nav == null ? null : ScaffoldMessenger.maybeOf(nav.context);
@@ -134,7 +139,7 @@ class KBDeepLink {
         content: Text("Signed in."),
       ));
     } catch (err) {
-      debugPrint('kb.auth-callback: $err');
+      debugPrint('kb.auth-callback: exchange FAILED — $err');
       final nav = globalKey.currentState;
       final messenger =
           nav == null ? null : ScaffoldMessenger.maybeOf(nav.context);
