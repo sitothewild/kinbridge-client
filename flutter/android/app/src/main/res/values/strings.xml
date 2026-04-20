@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">RustDesk</string>
-    <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when RustDesk screen sharing is established</string>
+    <string name="app_name">KinBridge Support</string>
+    <string name="accessibility_service_description">Let a trusted helper perform taps and scrolls on your phone during a KinBridge Support session. You can turn this off any time in Accessibility settings.</string>
 </resources>
