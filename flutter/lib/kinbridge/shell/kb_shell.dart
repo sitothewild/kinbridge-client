@@ -7,6 +7,7 @@ import '../helper/helper_home_page.dart';
 import '../history/history_page.dart';
 import '../session/kb_deep_link.dart';
 import '../data/kb_supabase.dart';
+import 'kb_account_page.dart';
 
 /// Runtime role. Phase V: hydrated from Supabase `user_roles`.
 /// Phase III: user picks on first launch, persisted in shared prefs.
@@ -109,7 +110,8 @@ class _KBShellState extends State<KBShell> {
       icon: Icons.settings_outlined,
       activeIcon: Icons.settings_rounded,
       label: "Settings",
-      build: () => widget.settingsPage,
+      build: () =>
+          KBAccountPage(advancedSettingsPage: widget.settingsPage),
     ),
   ];
 

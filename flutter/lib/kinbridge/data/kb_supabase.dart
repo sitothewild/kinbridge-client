@@ -56,14 +56,27 @@ class KBSupabase {
   }
 
   /// Kicks off Google OAuth via Supabase PKCE. Opens the provider URL in
-  /// the system browser; user lands back at
-  /// `kinbridge://auth-callback?code=…`, which [KBDeepLink] hands to
-  /// [completeOAuthCallback] for the code-for-session exchange.
+  /// the system browser; Supabase redirects to a Lovable-hosted HTTPS
+  /// bounce page at `https://kinbridge.support/auth-callback` (because
+  /// the Lovable Cloud dashboard UI rejects custom-scheme entries in
+  /// its URI allow list — platform-level validation, no admin
+  /// workaround). The bounce page fires an `intent://` URL that Android
+  /// translates to `kinbridge://auth-callback?code=…`, which matches
+  /// our existing custom-scheme intent-filter and lands in
+  /// [KBDeepLink._dispatchAuthCallback] → [completeOAuthCallback] for
+  /// the code-for-session exchange.
+  ///
+  /// Caveat: the PKCE code verifier lives in [_KBMemoryAuthStorage]
+  /// (RAM-only today). If Android kills the app while the browser is
+  /// foregrounded — unlikely on a desktop emulator, possible on a
+  /// low-memory device — the verifier is lost and
+  /// [exchangeCodeForSession] fails. Swap for a shared_preferences or
+  /// flutter_secure_storage backing store when we pick up task V-b.3.
   static Future<void> signInWithGoogle() async {
     await init();
     final res = await client.auth.getOAuthSignInUrl(
       provider: OAuthProvider.google,
-      redirectTo: 'kinbridge://auth-callback',
+      redirectTo: 'https://kinbridge.support/auth-callback',
     );
     final uri = Uri.parse(res.url);
     final launched = await launchUrl(
