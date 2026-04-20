@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase/supabase.dart' show AuthState;
 
 import '../data/kb_supabase.dart';
 import '../shell/kb_shell.dart' show KBRole;
@@ -35,14 +38,66 @@ class _SignInPageState extends State<SignInPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
+  bool _googleBusy = false;
   bool _showPassword = false;
   String? _error;
+  StreamSubscription<AuthState>? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for auth-state changes that arrive via the PKCE
+    // kinbridge://auth-callback deep link (Google sign-in). When the
+    // session lands, hand off to [onSignedIn] just like email/password.
+    Future.microtask(() async {
+      try {
+        await KBSupabase.init();
+        _authSub = KBSupabase.authStateChanges().listen((s) async {
+          if (!mounted) return;
+          final user = s.session?.user;
+          if (user == null) return;
+          // Only react to signed-in events while the Google flow is
+          // active — otherwise we'd fire the callback on cold-boot
+          // session restoration too.
+          if (!_googleBusy) return;
+          final role = await _inferRole(user.id);
+          if (!mounted) return;
+          widget.onSignedIn(role);
+        });
+      } catch (_) {
+        /* best-effort — still allows email/password sign-in */
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (_googleBusy) return;
+    setState(() {
+      _googleBusy = true;
+      _error = null;
+    });
+    try {
+      await KBSupabase.signInWithGoogle();
+      // Google flow is async + browser-based. The auth-state listener
+      // installed in initState will fire onSignedIn when the session
+      // lands via the kinbridge://auth-callback deep link. Until then
+      // keep the spinner on.
+    } catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _googleBusy = false;
+        _error = "Couldn't open Google sign-in. "
+            "Try again or use email and password.";
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -133,10 +188,17 @@ class _SignInPageState extends State<SignInPage> {
                 Text("Sign in", style: KBText.title()),
                 const SizedBox(height: KB.s3),
                 Text(
-                  "Use the email and password you created on the KinBridge dashboard.",
+                  "Sign in with Google, or use the email and password you created on the KinBridge dashboard.",
                   style: KBText.body(color: KB.muted),
                 ),
-                const SizedBox(height: KB.s6),
+                const SizedBox(height: KB.s5),
+                _GoogleSignInButton(
+                  busy: _googleBusy,
+                  onTap: _busy ? null : _signInWithGoogle,
+                ),
+                const SizedBox(height: KB.s5),
+                _OrDivider(),
+                const SizedBox(height: KB.s5),
                 _FieldLabel("EMAIL"),
                 const SizedBox(height: KB.s2),
                 _KBTextField(
@@ -233,6 +295,123 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Text(text, style: KBText.overline());
+}
+
+class _GoogleSignInButton extends StatelessWidget {
+  const _GoogleSignInButton({required this.busy, required this.onTap});
+  final bool busy;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: busy ? null : onTap,
+          borderRadius: BorderRadius.circular(KB.radiusPill),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: KB.s4),
+            decoration: BoxDecoration(
+              color: KB.surface,
+              borderRadius: BorderRadius.circular(KB.radiusPill),
+              border: Border.all(color: KB.hairline, width: 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (busy)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: KB.amber, strokeWidth: 2.5),
+                  )
+                else
+                  _GoogleGlyph(),
+                const SizedBox(width: KB.s3),
+                Text(
+                  busy ? "Opening Google…" : "Continue with Google",
+                  style: KBText.label(color: KB.deepInk),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Minimal inline Google "G" mark. Google's brand guidelines require
+/// the multicolor "G" on a white background, which is what we render
+/// here. If we ever need the full color-accurate vector, swap this
+/// for an asset SVG; the colors below are Google's brand-book hexes.
+class _GoogleGlyph extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: CustomPaint(painter: _GoogleGPainter()),
+    );
+  }
+}
+
+class _GoogleGPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Simple stylized "G" circle with Google brand blue as the stroke.
+    // Not a pixel-perfect replica — just a recognizable cue that matches
+    // the "Continue with Google" label. Google's sign-in guidelines
+    // accept a white-background button with a colored G.
+    const blue = Color(0xFF4285F4);
+    const red = Color(0xFFEA4335);
+    const yellow = Color(0xFFFBBC05);
+    const green = Color(0xFF34A853);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    final rect =
+        Rect.fromCenter(center: size.center(Offset.zero), width: 16, height: 16);
+    // Four quadrants in the Google palette.
+    canvas.drawArc(rect, -3.14 / 2, 3.14 / 2, false, paint..color = blue);
+    canvas.drawArc(rect, 0, 3.14 / 2, false, paint..color = green);
+    canvas.drawArc(rect, 3.14 / 2, 3.14 / 2, false, paint..color = yellow);
+    canvas.drawArc(rect, 3.14, 3.14 / 2, false, paint..color = red);
+    // Horizontal bar of the G.
+    final bar = Paint()
+      ..color = blue
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(size.center(Offset.zero).dx, size.center(Offset.zero).dy),
+      Offset(size.center(Offset.zero).dx + 8,
+          size.center(Offset.zero).dy),
+      bar,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _OrDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: KB.hairline, height: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: KB.s3),
+          child: Text("OR", style: KBText.overline()),
+        ),
+        Expanded(child: Divider(color: KB.hairline, height: 1)),
+      ],
+    );
+  }
 }
 
 class _KBTextField extends StatelessWidget {

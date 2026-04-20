@@ -18,6 +18,9 @@ import '../../common.dart' show globalKey;
 import '../data/kb_models.dart';
 import '../data/kb_repository.dart';
 import '../data/kb_server_fn.dart';
+import '../data/kb_supabase.dart';
+import 'install_complete_page.dart';
+import 'invite_accept_page.dart';
 import 'live_session_page.dart';
 
 // Reuses the existing RustDesk-side [globalKey] navigator so deep-link
@@ -41,6 +44,8 @@ class KBDeepLink {
         case 'quickconnect':
         case 'pair':
           return _dispatchQuickConnect(uri);
+        case 'auth-callback':
+          return _dispatchAuthCallback(uri);
         default:
           debugPrint("kb: unknown kinbridge:// host '${uri.host}' — ignoring");
           return false;
@@ -99,6 +104,46 @@ class KBDeepLink {
     _pendingQuickConnect = _PendingQuickConnect(code: code);
     _drainQuickConnectIfReady();
     return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // auth-callback?code=<authcode>  — Supabase PKCE OAuth return
+  // ---------------------------------------------------------------------------
+  static bool _dispatchAuthCallback(Uri uri) {
+    final code = uri.queryParameters['code'];
+    if (code == null || code.isEmpty) {
+      debugPrint('kb: kinbridge://auth-callback rejected — missing code');
+      return true;
+    }
+    // Exchange asynchronously; the auth-state listener on [KBSupabase]
+    // flips [KBRepository.instance] once the session lands. We don't
+    // need to navigate anywhere — the onboarding flow / SignInPage is
+    // still on screen, it will react to the auth-state change.
+    _exchangeAuthCode(code);
+    return true;
+  }
+
+  static Future<void> _exchangeAuthCode(String code) async {
+    try {
+      await KBSupabase.completeOAuthCallback(code);
+      final nav = globalKey.currentState;
+      final messenger =
+          nav == null ? null : ScaffoldMessenger.maybeOf(nav.context);
+      messenger?.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text("Signed in."),
+      ));
+    } catch (err) {
+      debugPrint('kb.auth-callback: $err');
+      final nav = globalKey.currentState;
+      final messenger =
+          nav == null ? null : ScaffoldMessenger.maybeOf(nav.context);
+      messenger?.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+            "Sign-in didn't complete. Try again or use email & password."),
+      ));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -200,18 +245,14 @@ class KBDeepLink {
     final messenger = ScaffoldMessenger.maybeOf(nav.context);
     try {
       final device = await KBServerFn.redeemInstallToken(token: token);
-      if (messenger != null) {
-        messenger.showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            content: Text("Device bound: ${device.name}"),
-          ),
-        );
-      }
       debugPrint('kb.install: device=${device.id} owner=${device.ownerId}');
-      // TODO(beta.6 UI): push InstallCompletePage showing device name +
-      // "This phone is ready. Ask your family members to pair with you
-      // or send them an invite link."
+      if (!nav.mounted) return;
+      nav.push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => InstallCompletePage(device: device),
+        ),
+      );
     } on KBServerFnError catch (err) {
       debugPrint('kb.install: $err');
       if (messenger != null) {
@@ -307,34 +348,16 @@ class KBDeepLink {
     NavigatorState nav,
     String token,
   ) async {
-    final messenger = ScaffoldMessenger.maybeOf(nav.context);
-    try {
-      final preview = await KBServerFn.lookupInvite(token: token);
-      if (!preview.valid) {
-        messenger?.showSnackBar(SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text(preview.friendlyReason),
-        ));
-        return;
-      }
-      final accept = await KBServerFn.acceptHelperInvite(token: token);
-      messenger?.showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-            "You're now approved to help with ${preview.deviceName ?? 'this device'}."),
-      ));
-      debugPrint('kb.invite: pairing=${accept.pairingId} device=${accept.deviceId}');
-      // TODO(beta.6 UI): push a confirmation page showing device +
-      // inviter + an "Open Family" CTA landing on Helper Home.
-    } on KBServerFnError catch (err) {
-      debugPrint('kb.invite: $err');
-      messenger?.showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(err.message.contains('own invite')
-            ? "You can't accept your own invite."
-            : "Couldn't accept that invite. Try opening the link again."),
-      ));
-    }
+    // The preview + accept flow lives on InviteAcceptPage — it does its
+    // own lookupInvite + acceptHelperInvite and handles all error states.
+    // Deep-link dispatcher just routes the token into it.
+    if (!nav.mounted) return;
+    nav.push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => InviteAcceptPage(token: token),
+      ),
+    );
   }
 }
 

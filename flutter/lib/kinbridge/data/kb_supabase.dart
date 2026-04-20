@@ -13,6 +13,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase/supabase.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'kb_repository.dart';
 import 'kb_supabase_repository.dart';
@@ -30,9 +31,9 @@ class KBSupabase {
   static SupabaseClient? _client;
 
   /// Bootstraps the Supabase singleton. Safe to call repeatedly (idempotent).
-  /// PKCE is configured so the `kinbridge://auth-callback` deep-link path
-  /// (handled in common.dart via uni_links) works with
-  /// `client.auth.getSessionFromUrl(uri)`.
+  /// PKCE flow + in-memory async storage are configured so
+  /// `kinbridge://auth-callback?code=…` can complete via
+  /// `client.auth.exchangeCodeForSession(code)`.
   ///
   /// On completion this also installs an auth-state listener that rebinds
   /// [KBRepository.instance] — signed-in → [SupabaseKBRepository],
@@ -43,11 +44,49 @@ class KBSupabase {
     _client = SupabaseClient(
       _url,
       _anonKey,
-      authOptions: const AuthClientOptions(authFlowType: AuthFlowType.pkce),
+      authOptions: AuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+        pkceAsyncStorage: _KBMemoryAuthStorage(),
+      ),
     );
     _bindRepositoryToAuth();
-    // Session restoration lands with the PKCE deep-link in step 5 (pure-Dart
-    // SDK persistence is caller-managed). Cold-boot today starts signed-out.
+    // Session restoration is a later milestone — using hydrated persistent
+    // storage (e.g. shared_preferences) would allow cold-boot sign-in
+    // memory. For now, cold-boot starts signed-out.
+  }
+
+  /// Kicks off Google OAuth via Supabase PKCE. Opens the provider URL in
+  /// the system browser; user lands back at
+  /// `kinbridge://auth-callback?code=…`, which [KBDeepLink] hands to
+  /// [completeOAuthCallback] for the code-for-session exchange.
+  static Future<void> signInWithGoogle() async {
+    await init();
+    final res = await client.auth.getOAuthSignInUrl(
+      provider: OAuthProvider.google,
+      redirectTo: 'kinbridge://auth-callback',
+    );
+    final uri = Uri.parse(res.url);
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched) {
+      throw const AuthException(
+        "Couldn't open the sign-in page. Make sure you have a web browser installed.",
+      );
+    }
+  }
+
+  /// Called by [KBDeepLink] on `kinbridge://auth-callback?code=…`.
+  /// Exchanges the one-shot auth code for a session + triggers the
+  /// auth-state listener which flips [KBRepository.instance] to the
+  /// Supabase-backed impl. Caller is responsible for UX (success
+  /// confirmation, dismissing any in-flight spinner).
+  static Future<AuthSessionUrlResponse> completeOAuthCallback(
+    String code,
+  ) async {
+    await init();
+    return client.auth.exchangeCodeForSession(code);
   }
 
   static StreamSubscription<AuthState>? _authSub;
@@ -109,4 +148,26 @@ class KBSupabase {
   /// state when the user signs in/out.
   static Stream<AuthState> authStateChanges() =>
       client.auth.onAuthStateChange;
+}
+
+/// In-memory PKCE code-verifier storage. Good enough for the OAuth
+/// browser round-trip (typically <30 seconds); swap to
+/// shared_preferences when we want sign-in to survive a cold boot
+/// initiated during the provider page. gotrue requires this interface
+/// when AuthFlowType.pkce is selected.
+class _KBMemoryAuthStorage extends GotrueAsyncStorage {
+  final Map<String, String> _m = {};
+
+  @override
+  Future<String?> getItem({required String key}) async => _m[key];
+
+  @override
+  Future<void> setItem({required String key, required String value}) async {
+    _m[key] = value;
+  }
+
+  @override
+  Future<void> removeItem({required String key}) async {
+    _m.remove(key);
+  }
 }

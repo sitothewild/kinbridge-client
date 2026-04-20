@@ -7,6 +7,7 @@ import '../data/kb_server_fn.dart';
 import '../data/kb_supabase.dart';
 import '../session/live_session_page.dart';
 import '../history/session_detail_page.dart';
+import 'quick_connect_page.dart';
 
 /// Helper Home (complement to spec page 7).
 ///
@@ -79,6 +80,14 @@ class _HelperHomePageState extends State<HelperHomePage> {
                   ],
                 ),
                 const SizedBox(height: KB.s6),
+                _QuickConnectCard(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const QuickConnectPage(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: KB.s6),
                 Container(
                   padding: const EdgeInsets.all(KB.s5),
                   decoration: BoxDecoration(
@@ -106,6 +115,61 @@ class _HelperHomePageState extends State<HelperHomePage> {
                 _RecentSessions(future: _sessions),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickConnectCard extends StatelessWidget {
+  const _QuickConnectCard({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(KB.radiusCard),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(KB.s5),
+          decoration: BoxDecoration(
+            color: KB.surface,
+            borderRadius: BorderRadius.circular(KB.radiusCard),
+            border: Border.all(color: KB.hairline, width: 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: KB.amber.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.pin_rounded,
+                    color: KB.amber, size: 22),
+              ),
+              const SizedBox(width: KB.s4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Have a code?", style: KBText.heading()),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Enter a 6-digit code to help right now.",
+                      style: KBText.body(color: KB.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  color: KB.muted, size: 24),
+            ],
           ),
         ),
       ),

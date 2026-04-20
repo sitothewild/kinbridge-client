@@ -86,6 +86,7 @@
                 <data android:scheme="kinbridge" android:host="install" />
                 <data android:scheme="kinbridge" android:host="quickconnect" />
                 <data android:scheme="kinbridge" android:host="pair" />
+                <data android:scheme="kinbridge" android:host="auth-callback" />
             </intent-filter>
 
             <!-- App Link for the helper-invite flow:
