@@ -551,7 +551,7 @@ extern "C"
         DWORD count;
         auto rdp = "rdp";
         auto nrdp = strlen(rdp);
-        // https://github.com/rustdesk/rustdesk/discussions/937#discussioncomment-12373814 citrix session
+        // [upstream] citrix session
         auto ica = "ica";
         auto nica = strlen(ica);
         if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))

@@ -72,17 +72,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Intent for deep linking-->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="rustdesk" />
-            </intent-filter>
-
             <!-- KinBridge session deep link: kinbridge://session/<id>?token=<jwt>
                  Minted by kinbridge-api /api/sessions/start, tapped from
-                 Lovable's dashboard notification or push. See
+                 the KinBridge Support dashboard notification or push. See
                  lib/kinbridge/session/kb_deep_link.dart. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

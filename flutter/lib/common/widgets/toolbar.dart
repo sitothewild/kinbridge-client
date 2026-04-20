@@ -156,7 +156,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         onPressed: () => ffi.cursorModel.reset()));
   }
 
-  // https://github.com/rustdesk/rustdesk/pull/9731
+  // [upstream]
   // Does not work for connection established by "accept".
   connectWithToken(
       {bool isFileTransfer = false,
@@ -209,7 +209,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
               // Web: login is required before connection, so no need to refresh
               // Mobile: same isolate, no need to send message
               if (isDesktop) {
-                rustDeskWinManager.call(
+                kbWinManager.call(
                     WindowType.Main, kWindowRefreshCurrentUser, "");
               }
             }

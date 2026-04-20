@@ -3666,7 +3666,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
             && ((cfg!(windows) && (errno == 10054 || err.contains("10054")))
                 || (!cfg!(windows) && (errno == 104 || err.contains("104")))
                 || (!err.contains("Failed") && err.contains("deadline")))
-        // deadline: https://github.com/rustdesk/rustdesk-server-pro/discussions/325, most likely comes from secure tcp timeout
+        // deadline: [upstream] most likely comes from secure tcp timeout
         {
             relay_hint = true;
             if !received {

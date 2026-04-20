@@ -410,7 +410,7 @@ impl PrivacyModeImpl {
         if is_virtual_display_added {
             self.restore_plug_out_monitor();
         } else {
-            // https://github.com/rustdesk/rustdesk/pull/12114#issuecomment-2983054370
+            // [upstream]
             // No virtual displays added, we need to change the display combination to force the display settings to be reloaded.
             // This function changes the user behavior of the virtual displays.
             // But it makes the privacy mode more stable.

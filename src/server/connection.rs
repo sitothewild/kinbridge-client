@@ -2246,7 +2246,7 @@ impl Connection {
                 .await
                 {
                     log::warn!("ipc to connection manager exit: {}", err);
-                    // https://github.com/rustdesk/rustdesk-server-pro/discussions/382#discussioncomment-10525725, cm may start failed
+                    // [upstream] cm may start failed
                     #[cfg(windows)]
                     if !crate::platform::is_prelogin()
                         && !err.to_string().contains(crate::platform::EXPLORER_EXE)
@@ -2396,7 +2396,7 @@ impl Connection {
                 return true;
             }
 
-            // https://github.com/rustdesk/rustdesk-server-pro/discussions/646
+            // [upstream]
             // `is_logon` is used to check login with `OPTION_ALLOW_LOGON_SCREEN_PASSWORD` == "Y".
             // `is_logon_ui()` is a fallback for logon UI detection on Windows.
             #[cfg(target_os = "windows")]
@@ -2719,7 +2719,7 @@ impl Connection {
                         if is_enter(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         }
-                        // https://github.com/rustdesk/rustdesk/issues/8633
+                        // [upstream]
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
 
                         let key = match me.mode.enum_value() {
@@ -2740,7 +2740,7 @@ impl Connection {
                         // handle all down as press
                         // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which
                         // make sure all key are released
-                        // https://github.com/rustdesk/rustdesk/issues/6793
+                        // [upstream]
                         let is_press = if cfg!(target_os = "linux") {
                             (me.press || me.down) && !(crate::is_modifier(&me) || key.is_some())
                         } else {

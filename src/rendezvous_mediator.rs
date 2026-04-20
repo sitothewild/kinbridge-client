@@ -135,7 +135,7 @@ impl RendezvousMediator {
                     sleep(((timeout - elapsed) / 1000) as _).await;
                 }
             } else {
-                // https://github.com/rustdesk/rustdesk/issues/12233
+                // [upstream]
                 sleep(0.033).await;
             }
         }
