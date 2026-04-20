@@ -147,6 +147,39 @@ class _PreviewState extends StatelessWidget {
             textAlign: TextAlign.center,
             style: KBText.body(color: KB.muted),
           ),
+          if (lookup.note != null && lookup.note!.trim().isNotEmpty) ...[
+            const SizedBox(height: KB.s4),
+            Container(
+              padding: const EdgeInsets.all(KB.s4),
+              decoration: BoxDecoration(
+                color: KB.amber.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(KB.radiusField),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.format_quote_rounded,
+                      color: KB.amber, size: 18),
+                  const SizedBox(width: KB.s2),
+                  Expanded(
+                    child: Text(
+                      lookup.note!,
+                      style: KBText.body(color: KB.deepInk),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (lookup.expiresAt != null) ...[
+            const SizedBox(height: KB.s3),
+            Center(
+              child: Text(
+                "Expires ${_relativeFuture(lookup.expiresAt!)}",
+                style: KBText.caption(),
+              ),
+            ),
+          ],
           const SizedBox(height: KB.s6),
           Container(
             padding: const EdgeInsets.all(KB.s5),
@@ -215,6 +248,18 @@ class _PreviewState extends StatelessWidget {
       ),
     );
   }
+}
+
+String _relativeFuture(DateTime when) {
+  final now = DateTime.now();
+  if (when.isBefore(now)) return 'soon';
+  final diff = when.difference(now);
+  if (diff.inDays >= 2) return 'in ${diff.inDays} days';
+  if (diff.inDays == 1) return 'tomorrow';
+  if (diff.inHours >= 2) return 'in ${diff.inHours} hours';
+  if (diff.inHours == 1) return 'in 1 hour';
+  if (diff.inMinutes >= 2) return 'in ${diff.inMinutes} minutes';
+  return 'in a moment';
 }
 
 class _SuccessState extends StatelessWidget {

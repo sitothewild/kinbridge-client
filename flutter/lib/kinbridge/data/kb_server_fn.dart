@@ -69,20 +69,41 @@ class KBDeviceRow {
   final String ownerId;
 }
 
-/// Lightweight preview of an invite token. [valid] == true means the
-/// caller can proceed to [KBServerFn.acceptHelperInvite]. When false,
-/// [reason] is one of: `not_found`, `revoked`, `consumed`, `expired`.
+/// Lightweight preview of an invite token via `lookupInvite`.
+///
+/// Two response shapes per Lovable's `android-snippets/HELPER_INVITE.md`:
+///   • **valid** — `{ valid:true, inviteId, deviceName, inviterName, note,
+///     expiresAt }`
+///   • **invalid** — `{ valid:false, reason:"not_found"|"revoked"|
+///     "consumed"|"expired" }`
+///
+/// Android uses this for the preview UI on `InviteAcceptPage`; only
+/// consumes the token (via `acceptHelperInvite`) once the user taps
+/// Accept. Invalid → render the friendly rejection copy from
+/// [friendlyReason] rather than the raw reason.
 class KBInviteLookup {
   KBInviteLookup({
     required this.valid,
     required this.reason,
+    required this.inviteId,
     required this.deviceName,
     required this.inviterName,
+    required this.note,
+    required this.expiresAt,
   });
   final bool valid;
   final String? reason;
+  final String? inviteId;
   final String? deviceName;
   final String? inviterName;
+
+  /// Optional note the inviter attached ("Hey Sara — I want you to be able
+  /// to help with Dad's tablet"). Shown verbatim on the preview page.
+  final String? note;
+
+  /// Invite expiration (ISO-8601 on the wire, parsed to local time here).
+  /// Preview UI can show "Expires in 3 days" via a relative-date helper.
+  final DateTime? expiresAt;
 
   String get friendlyReason {
     switch (reason) {
@@ -256,15 +277,21 @@ class KBServerFn {
     );
   }
 
-  /// Helper-side: accept an invite without consuming it. Used to render
-  /// the preview UI on `/invite/<token>` before the user taps Accept.
+  /// Helper-side: preview an invite without consuming it. Renders the
+  /// `/invite/<token>` preview page before the user taps Accept.
   static Future<KBInviteLookup> lookupInvite({required String token}) async {
     final r = await _post('lookupInvite', {'token': token});
+    final expiresRaw = r['expiresAt'];
     return KBInviteLookup(
       valid: (r['valid'] as bool?) ?? false,
       reason: r['reason'] as String?,
+      inviteId: r['inviteId'] as String?,
       deviceName: r['deviceName'] as String?,
       inviterName: r['inviterName'] as String?,
+      note: r['note'] as String?,
+      expiresAt: expiresRaw is String
+          ? DateTime.tryParse(expiresRaw)?.toLocal()
+          : null,
     );
   }
 
