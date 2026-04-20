@@ -78,6 +78,16 @@ class WelcomePage extends StatelessWidget {
                           style: KBText.label(color: KB.amber),
                         ),
                       ),
+                      const SizedBox(height: KB.s3),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: KB.s3),
+                        child: Text(
+                          "Use KinBridge with care. You're in control of every session — we take no responsibility for misuse. By continuing you agree to our Terms and Privacy Policy.",
+                          textAlign: TextAlign.center,
+                          style: KBText.caption(color: KB.muted),
+                        ),
+                      ),
                     ],
                   ),
                 ),
