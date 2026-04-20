@@ -4,6 +4,7 @@ import '../shell/kb_shell.dart' show KBRole;
 import 'connect_code_page.dart';
 import 'notifications_page.dart';
 import 'role_picker_page.dart';
+import 'sign_in_page.dart';
 import 'welcome_page.dart';
 
 /// Keys written into RustDesk's local-options store. Reusing bind.* keeps
@@ -27,7 +28,7 @@ class OnboardingFlow extends StatefulWidget {
   State<OnboardingFlow> createState() => _OnboardingFlowState();
 }
 
-enum _Step { welcome, role, connectCode, notifications }
+enum _Step { welcome, signIn, role, connectCode, notifications }
 
 class _OnboardingFlowState extends State<OnboardingFlow> {
   _Step _step = _Step.welcome;
@@ -52,6 +53,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         switch (_step) {
           case _Step.welcome:
             return true;
+          case _Step.signIn:
+            setState(() => _step = _Step.welcome);
+            return false;
           case _Step.role:
             setState(() => _step = _Step.welcome);
             return false;
@@ -73,8 +77,21 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       case _Step.welcome:
         return WelcomePage(
           onGetStarted: () => setState(() => _step = _Step.role),
-          onSignIn: () => setState(() => _step = _Step.role),
+          onSignIn: () => setState(() => _step = _Step.signIn),
           onSkip: _complete,
+        );
+      case _Step.signIn:
+        return SignInPage(
+          onBack: () => setState(() => _step = _Step.welcome),
+          onSignedIn: (role) async {
+            // Returning user — their role is known from user_roles, skip
+            // role picker + connect-code (they already paired). Go straight
+            // to notifications prefs (first-launch on this device) then home.
+            setState(() => _role = role);
+            await _save(kKbRole, role == KBRole.owner ? "owner" : "helper");
+            if (!mounted) return;
+            setState(() => _step = _Step.notifications);
+          },
         );
       case _Step.role:
         return RolePickerPage(

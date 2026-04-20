@@ -1,44 +1,74 @@
 import 'package:flutter/material.dart';
 import '../theme/kb_tokens.dart';
 import '../widgets/kb_avatar.dart';
+import '../data/kb_models.dart';
+import '../data/kb_repository.dart';
+import '../history/session_detail_page.dart';
 
 /// Owner Home (spec page 7).
 ///
 /// "Mom's home screen — ask for help in one tap."
 ///
-/// This screen is intentionally low-density. The whole job of the Owner Home
-/// is to make the "Ask for help" affordance obvious. Everything else is
-/// secondary.
-///
-/// Data today is placeholder (see [_placeholderHelpers], [_placeholderActivity]).
-/// Phase V wires to Supabase via the KinBridge API.
-class OwnerHomePage extends StatelessWidget {
+/// The whole job of this screen is making "Ask for help" obvious. Everything
+/// else is secondary. Data comes from [KBRepository.instance] (fake today,
+/// real once Phase V-b lands).
+class OwnerHomePage extends StatefulWidget {
   const OwnerHomePage({super.key, this.displayName = "Mom"});
 
   final String displayName;
+
+  @override
+  State<OwnerHomePage> createState() => _OwnerHomePageState();
+}
+
+class _OwnerHomePageState extends State<OwnerHomePage> {
+  late Future<List<KBHelper>> _helpers;
+  late Future<List<KBSession>> _sessions;
+
+  @override
+  void initState() {
+    super.initState();
+    _helpers = KBRepository.instance.listHelpers();
+    _sessions = KBRepository.instance.listSessions(limit: 4);
+  }
+
+  Future<void> _refresh() async {
+    final h = KBRepository.instance.listHelpers();
+    final s = KBRepository.instance.listSessions(limit: 4);
+    setState(() {
+      _helpers = h;
+      _sessions = s;
+    });
+    await Future.wait([h, s]);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: KB.parchment,
       child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(KB.s6, KB.s4, KB.s6, KB.s10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Greeting(displayName: displayName),
-              const SizedBox(height: KB.s6),
-              const _NeedAHandCard(),
-              const SizedBox(height: KB.s8),
-              _SectionEyebrow(label: "RECENT HELPERS"),
-              const SizedBox(height: KB.s4),
-              const _RecentHelpersRow(),
-              const SizedBox(height: KB.s8),
-              _SectionEyebrow(label: "ACTIVITY"),
-              const SizedBox(height: KB.s3),
-              const _ActivityList(),
-            ],
+        child: RefreshIndicator(
+          color: KB.amber,
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(KB.s6, KB.s4, KB.s6, KB.s10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Greeting(displayName: widget.displayName),
+                const SizedBox(height: KB.s6),
+                const _NeedAHandCard(),
+                const SizedBox(height: KB.s8),
+                Text("RECENT HELPERS", style: KBText.overline()),
+                const SizedBox(height: KB.s4),
+                _RecentHelpersRow(future: _helpers),
+                const SizedBox(height: KB.s8),
+                Text("ACTIVITY", style: KBText.overline()),
+                const SizedBox(height: KB.s3),
+                _ActivityList(future: _sessions),
+              ],
+            ),
           ),
         ),
       ),
@@ -94,7 +124,7 @@ class _NeedAHandCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(KB.radiusCard),
         onTap: () {
-          // TODO(phase V): POST /api/help-requests via KinBridgeApi.
+          // TODO(phase V-b): POST /api/help-requests via HttpKBRepository.
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: KB.deepInk,
@@ -147,8 +177,8 @@ class _NeedAHandCard extends StatelessWidget {
               ),
               const SizedBox(height: KB.s4),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: KB.s4, vertical: KB.s3),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: KB.s4, vertical: KB.s3),
                 decoration: BoxDecoration(
                   color: KB.surface,
                   borderRadius: BorderRadius.circular(KB.radiusPill),
@@ -171,139 +201,184 @@ class _NeedAHandCard extends StatelessWidget {
   }
 }
 
-class _SectionEyebrow extends StatelessWidget {
-  const _SectionEyebrow({required this.label});
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    return Text(label, style: KBText.overline());
-  }
-}
-
-class _Helper {
-  const _Helper(this.name, this.initials, {required this.online, this.subtitle});
-  final String name;
-  final String initials;
-  final bool online;
-  final String? subtitle;
-}
-
-// Placeholder data — replaced in Phase V via Supabase `device_pairings`
-// joined with `profiles`.
-const List<_Helper> _placeholderHelpers = [
-  _Helper("Sara", "S", online: true, subtitle: "online"),
-  _Helper("James", "J", online: true, subtitle: "online"),
-  _Helper("Priya", "P", online: false, subtitle: "2h ago"),
-];
-
 class _RecentHelpersRow extends StatelessWidget {
-  const _RecentHelpersRow();
+  const _RecentHelpersRow({required this.future});
+  final Future<List<KBHelper>> future;
+
+  String _subtitle(KBHelper h) {
+    if (h.online) return "online";
+    final last = h.lastSeen;
+    if (last == null) return "offline";
+    final diff = DateTime.now().difference(last);
+    if (diff.inMinutes < 1) return "just now";
+    if (diff.inHours < 1) return "${diff.inMinutes}m ago";
+    if (diff.inDays < 1) return "${diff.inHours}h ago";
+    return "${diff.inDays}d ago";
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final h in _placeholderHelpers)
-            Padding(
-              padding: const EdgeInsets.only(right: KB.s5),
-              child: _HelperChip(helper: h),
+    return FutureBuilder<List<KBHelper>>(
+      future: future,
+      builder: (context, snap) {
+        final helpers = snap.data ?? const <KBHelper>[];
+        if (snap.connectionState != ConnectionState.done) {
+          return const SizedBox(
+            height: 104,
+            child: Center(
+              child: CircularProgressIndicator(color: KB.amber),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HelperChip extends StatelessWidget {
-  const _HelperChip({required this.helper});
-  final _Helper helper;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 96,
-      child: Column(
-        children: [
-          KBAvatar(
-            initials: helper.initials,
-            size: 64,
-            online: helper.online,
-            tint: KB.amber,
+          );
+        }
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final h in helpers)
+                Padding(
+                  padding: const EdgeInsets.only(right: KB.s5),
+                  child: SizedBox(
+                    width: 96,
+                    child: Column(
+                      children: [
+                        KBAvatar(
+                          initials: h.initials,
+                          size: 64,
+                          online: h.online,
+                          tint: KB.amber,
+                        ),
+                        const SizedBox(height: KB.s2),
+                        Text(h.name,
+                            style: KBText.label(),
+                            textAlign: TextAlign.center),
+                        Text(
+                          _subtitle(h),
+                          style: KBText.caption(
+                              color: h.online ? KB.sage : KB.muted),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: KB.s2),
-          Text(helper.name,
-              style: KBText.label(), textAlign: TextAlign.center),
-          if (helper.subtitle != null)
-            Text(helper.subtitle!,
-                style: KBText.caption(color: helper.online ? KB.sage : KB.muted),
-                textAlign: TextAlign.center),
-        ],
-      ),
+        );
+      },
     );
   }
 }
-
-class _ActivityEntry {
-  const _ActivityEntry(this.icon, this.label, this.when);
-  final IconData icon;
-  final String label;
-  final String when;
-}
-
-// Placeholder — Phase V reads from Supabase `session_events`.
-const List<_ActivityEntry> _placeholderActivity = [
-  _ActivityEntry(
-      Icons.check_circle_outline, "Sara helped you set up Wi-Fi", "2h ago"),
-  _ActivityEntry(
-      Icons.handshake_outlined, "Pairing approved with James", "yesterday"),
-  _ActivityEntry(
-      Icons.notifications_active_outlined, "Help requested", "3 days ago"),
-];
 
 class _ActivityList extends StatelessWidget {
-  const _ActivityList();
+  const _ActivityList({required this.future});
+  final Future<List<KBSession>> future;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: KB.surface,
-        borderRadius: BorderRadius.circular(KB.radiusCard),
-        border: Border.all(color: KB.hairline, width: 1),
-      ),
-      child: Column(
-        children: [
-          for (int i = 0; i < _placeholderActivity.length; i++) ...[
-            _ActivityRow(entry: _placeholderActivity[i]),
-            if (i < _placeholderActivity.length - 1)
-              Divider(height: 1, color: KB.hairline, indent: KB.s5),
-          ],
-        ],
-      ),
-    );
+  String _when(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return "just now";
+    if (diff.inHours < 1) return "${diff.inMinutes}m ago";
+    if (diff.inDays < 1) return "${diff.inHours}h ago";
+    if (diff.inDays == 1) return "yesterday";
+    if (diff.inDays < 7) return "${diff.inDays}d ago";
+    return "${(diff.inDays / 7).floor()}w ago";
   }
-}
 
-class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({required this.entry});
-  final _ActivityEntry entry;
+  String _label(KBSession s) {
+    if (s.direction == KBRoleDirection.owner) {
+      return "${s.peerName} ${s.summary.toLowerCase().startsWith('helped')
+          ? s.summary.toLowerCase()
+          : 'helped you: ${s.summary.toLowerCase()}'}";
+    }
+    return s.summary;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: KB.s4, vertical: KB.s4),
-      child: Row(
-        children: [
-          Icon(entry.icon, size: 20, color: KB.amber),
-          const SizedBox(width: KB.s3),
-          Expanded(
-              child: Text(entry.label, style: KBText.body(color: KB.deepInk))),
-          Text(entry.when, style: KBText.caption()),
-        ],
-      ),
+    return FutureBuilder<List<KBSession>>(
+      future: future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return Container(
+            height: 96,
+            decoration: BoxDecoration(
+              color: KB.surface,
+              borderRadius: BorderRadius.circular(KB.radiusCard),
+              border: Border.all(color: KB.hairline, width: 1),
+            ),
+            alignment: Alignment.center,
+            child: const CircularProgressIndicator(color: KB.amber),
+          );
+        }
+        final sessions = snap.data ?? const <KBSession>[];
+        if (sessions.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(KB.s5),
+            decoration: BoxDecoration(
+              color: KB.surface,
+              borderRadius: BorderRadius.circular(KB.radiusCard),
+              border: Border.all(color: KB.hairline, width: 1),
+            ),
+            child: Text(
+              "Nothing here yet — when someone helps you, it shows up here.",
+              style: KBText.body(color: KB.muted),
+            ),
+          );
+        }
+        return Container(
+          decoration: BoxDecoration(
+            color: KB.surface,
+            borderRadius: BorderRadius.circular(KB.radiusCard),
+            border: Border.all(color: KB.hairline, width: 1),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < sessions.length; i++) ...[
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              SessionDetailPage(session: sessions[i]),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: KB.s4, vertical: KB.s4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            sessions[i].direction == KBRoleDirection.owner
+                                ? Icons.handshake_outlined
+                                : Icons.volunteer_activism_outlined,
+                            size: 20,
+                            color: KB.amber,
+                          ),
+                          const SizedBox(width: KB.s3),
+                          Expanded(
+                            child: Text(
+                              _label(sessions[i]),
+                              style: KBText.body(color: KB.deepInk),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(_when(sessions[i].startedAt),
+                              style: KBText.caption()),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (i < sessions.length - 1)
+                  Divider(height: 1, color: KB.hairline, indent: KB.s5),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

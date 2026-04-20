@@ -110,6 +110,13 @@ dependencies:
   sqflite: 2.2.0
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
+  # KinBridge data layer — pure-Dart Supabase SDK (no Flutter-specific
+  # transitive deps). We intentionally do NOT depend on supabase_flutter
+  # because it pulls in `app_links` which requires a top-level
+  # compileSdkVersion that the RustDesk Gradle config doesn't expose. Deep
+  # links (including auth callback) are handled via the existing uni_links
+  # integration in common.dart.
+  supabase: ^2.10.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4

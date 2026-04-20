@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/kb_tokens.dart';
 import '../owner/owner_home_page.dart';
 import '../helper/helper_home_page.dart';
+import '../history/history_page.dart';
+import '../session/kb_deep_link.dart';
 
 /// Runtime role. Phase V: hydrated from Supabase `user_roles`.
 /// Phase III: user picks on first launch, persisted in shared prefs.
@@ -33,6 +35,16 @@ class KBShell extends StatefulWidget {
 class _KBShellState extends State<KBShell> {
   int _tab = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // If a kinbridge:// link arrived before the navigator was ready (cold
+    // boot race), replay it now that we're mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      KBDeepLink.drainPending();
+    });
+  }
+
   late final List<_KBTab> _tabs = [
     _KBTab(
       icon: Icons.home_outlined,
@@ -56,11 +68,7 @@ class _KBShellState extends State<KBShell> {
       icon: Icons.history_outlined,
       activeIcon: Icons.history_rounded,
       label: "History",
-      build: () => const _PlaceholderPage(
-        title: "History",
-        subtitle: "Every session is recorded here — chat, taps, and notes.",
-        eyebrow: "COMING SOON",
-      ),
+      build: () => const HistoryPage(),
     ),
     _KBTab(
       icon: Icons.settings_outlined,

@@ -23,6 +23,7 @@ import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
+import 'kinbridge/session/kb_deep_link.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -2266,6 +2267,19 @@ setEnvTerminalAdmin() {
 
 // uri link handler
 bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
+  // KinBridge short-circuit: any kinbridge:// URI is handled by the KB
+  // deep-link dispatcher, not the RustDesk command-arg pipeline.
+  Uri? probed = uri;
+  if (probed == null && uriString != null) {
+    probed = Uri.tryParse(uriString);
+  }
+  if (probed == null && cmdArgs != null && cmdArgs.isNotEmpty) {
+    probed = Uri.tryParse(cmdArgs[0]);
+  }
+  if (probed != null && probed.scheme == "kinbridge") {
+    return KBDeepLink.tryHandle(probed);
+  }
+
   List<String>? args;
   if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
