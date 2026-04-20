@@ -29,7 +29,10 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:resizeableActivity="true">
+        android:resizeableActivity="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
 
         <receiver
             android:name=".BootReceiver"
