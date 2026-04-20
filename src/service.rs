@@ -1,4 +1,4 @@
-use librustdesk::*;
+use libkinbridge::*;
 
 #[cfg(not(target_os = "macos"))]
 fn main() {}
