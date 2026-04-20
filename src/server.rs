@@ -67,6 +67,7 @@ pub mod input_service {
 }
 
 mod connection;
+pub mod kinbridge_trust;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;

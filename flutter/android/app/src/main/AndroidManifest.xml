@@ -28,7 +28,8 @@
         android:label="KinBridge Support"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:resizeableActivity="true">
 
         <receiver
             android:name=".BootReceiver"
@@ -77,6 +78,17 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="rustdesk" />
+            </intent-filter>
+
+            <!-- KinBridge session deep link: kinbridge://session/<id>?token=<jwt>
+                 Minted by kinbridge-api /api/sessions/start, tapped from
+                 Lovable's dashboard notification or push. See
+                 lib/kinbridge/session/kb_deep_link.dart. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kinbridge" android:host="session" />
             </intent-filter>
         </activity>
 

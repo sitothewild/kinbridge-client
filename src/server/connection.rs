@@ -2277,6 +2277,18 @@ impl Connection {
         }
         // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            // KinBridge trust-circle gate. Mitigates CVE-2026-30784: even if
+            // the attacker reached hbbs/hbbr, they must present an `my_id`
+            // that the local whitelist (loaded from kinbridge_whitelist.json)
+            // accepts. Default mode is `off` so RustDesk behaviour is
+            // preserved on fresh installs; Wilson's dashboard flips to
+            // `strict` once pairings are seeded. See
+            // src/server/kinbridge_trust.rs.
+            if !crate::server::kinbridge_trust::allow_login(&lr.my_id) {
+                self.send_login_error("Not in the KinBridge trust circle")
+                    .await;
+                return false;
+            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
