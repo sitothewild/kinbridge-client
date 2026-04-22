@@ -42,8 +42,13 @@ class SupabaseKBRepository implements KBRepository {
   // Sessions
   // ---------------------------------------------------------------------------
 
-  /// Joins `devices` (for the owner-side data) and `profiles` (for the
-  /// helper's display_name). Columns aliased to make the mapping step pure.
+  /// Selects session + the FK-joinable `devices` row. We deliberately do
+  /// NOT embed `profiles` here — `sessions.helper_id` and
+  /// `devices.owner_id` both reference `auth.users(id)`, not
+  /// `profiles(id)`, so PostgREST can't infer the embedding and raises
+  /// `PGRST200: Could not find a relationship between ... and 'profiles'`.
+  /// Profiles are fetched in a second round-trip via [_fetchProfiles]
+  /// and merged in the mapping step.
   static const _sessionSelect = '''
     id,
     device_id,
@@ -58,11 +63,31 @@ class SupabaseKBRepository implements KBRepository {
       name,
       owner_id,
       platform,
-      last_seen,
-      owner:profiles!owner_id(id, display_name)
-    ),
-    helper:profiles!helper_id(id, display_name)
+      last_seen
+    )
   ''';
+
+  /// Batch-fetches `profiles` rows for a set of `auth.users.id` values.
+  /// Replaces the PostgREST `profiles!owner_id(...)` / `profiles!helper_id(...)`
+  /// embeddings we previously relied on. Empty/null ids are dropped; a
+  /// single query returns every matching profile regardless of count
+  /// (PostgREST `in()` filter). Result keyed by user id.
+  Future<Map<String, Map<String, dynamic>>> _fetchProfiles(
+      Iterable<String?> ids) async {
+    final unique = <String>{};
+    for (final id in ids) {
+      if (id != null && id.isNotEmpty) unique.add(id);
+    }
+    if (unique.isEmpty) return const <String, Map<String, dynamic>>{};
+    final rows = await _c
+        .from('profiles')
+        .select('id, display_name, avatar_url')
+        .inFilter('id', unique.toList()) as List<dynamic>;
+    return {
+      for (final r in rows)
+        (r as Map<String, dynamic>)['id'] as String: r,
+    };
+  }
 
   @override
   Future<List<KBSession>> listSessions({int limit = 50}) async {
@@ -71,8 +96,9 @@ class SupabaseKBRepository implements KBRepository {
         .select(_sessionSelect)
         .order('started_at', ascending: false)
         .limit(limit) as List<dynamic>;
+    final profiles = await _fetchProfiles(_extractUserIdsFromSessionRows(rows));
     return rows
-        .map((r) => _mapSession(r as Map<String, dynamic>))
+        .map((r) => _mapSession(r as Map<String, dynamic>, profiles))
         .whereType<KBSession>()
         .toList();
   }
@@ -85,10 +111,21 @@ class SupabaseKBRepository implements KBRepository {
         .eq('id', id)
         .maybeSingle();
     if (row == null) return null;
-    return _mapSession(row);
+    final profiles = await _fetchProfiles(_extractUserIdsFromSessionRows([row]));
+    return _mapSession(row, profiles);
   }
 
-  KBSession? _mapSession(Map<String, dynamic> row) {
+  Iterable<String?> _extractUserIdsFromSessionRows(List<dynamic> rows) sync* {
+    for (final r in rows) {
+      final row = r as Map<String, dynamic>;
+      yield row['helper_id'] as String?;
+      final device = row['device'] as Map<String, dynamic>?;
+      yield device?['owner_id'] as String?;
+    }
+  }
+
+  KBSession? _mapSession(
+      Map<String, dynamic> row, Map<String, Map<String, dynamic>> profiles) {
     try {
       final helperId = row['helper_id'] as String?;
       final device = row['device'] as Map<String, dynamic>?;
@@ -104,10 +141,11 @@ class SupabaseKBRepository implements KBRepository {
       final direction =
           isHelper ? KBRoleDirection.helper : KBRoleDirection.owner;
 
-      // Peer = the other participant.
-      final Map<String, dynamic>? peerProfile = isHelper
-          ? (device['owner'] as Map<String, dynamic>?)
-          : (row['helper'] as Map<String, dynamic>?);
+      // Peer = the other participant. Profile lookups come from the
+      // batched map populated by _fetchProfiles since PostgREST can't
+      // embed the cross-table FK.
+      final Map<String, dynamic>? peerProfile =
+          isHelper ? profiles[deviceOwnerId] : profiles[helperId];
       final peerName =
           (peerProfile?['display_name'] as String?)?.trim().isNotEmpty == true
               ? peerProfile!['display_name'] as String
@@ -267,9 +305,12 @@ class SupabaseKBRepository implements KBRepository {
       helper_id,
       status,
       updated_at,
-      device:devices!inner(id, owner_id),
-      profile:profiles!helper_id(id, display_name, avatar_url)
+      device:devices!inner(id, owner_id)
     ''').eq('status', 'approved') as List<dynamic>;
+
+    // Profiles fetched separately — see [_fetchProfiles] comment.
+    final profiles = await _fetchProfiles(
+        rows.map((r) => (r as Map<String, dynamic>)['helper_id'] as String?));
 
     final seen = <String>{};
     final out = <KBHelper>[];
@@ -278,9 +319,9 @@ class SupabaseKBRepository implements KBRepository {
       final device = row['device'] as Map<String, dynamic>?;
       // Scope to my devices only — owner view.
       if (device == null || device['owner_id'] != _uid) continue;
-      final profile = row['profile'] as Map<String, dynamic>?;
       final helperId = row['helper_id'] as String?;
       if (helperId == null || !seen.add(helperId)) continue;
+      final profile = profiles[helperId];
       final name =
           (profile?['display_name'] as String?)?.trim().isNotEmpty == true
               ? profile!['display_name'] as String
@@ -315,12 +356,14 @@ class SupabaseKBRepository implements KBRepository {
       owner_id,
       name,
       platform,
-      last_seen,
-      owner:profiles!owner_id(id, display_name)
+      last_seen
     ''') as List<dynamic>;
+    // Profiles fetched separately — see [_fetchProfiles] comment.
+    final profiles = await _fetchProfiles(
+        rows.map((r) => (r as Map<String, dynamic>)['owner_id'] as String?));
     return rows.map((r) {
       final row = r as Map<String, dynamic>;
-      final owner = row['owner'] as Map<String, dynamic>?;
+      final owner = profiles[row['owner_id'] as String?];
       final ownerName =
           (owner?['display_name'] as String?)?.trim().isNotEmpty == true
               ? owner!['display_name'] as String
