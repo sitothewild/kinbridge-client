@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="primary">#FF0071FF</color>
+    <!-- ic_launcher_background lives in ic_launcher_background.xml next to
+         splash_background; keeping them together since both are brand colors
+         for the Android boot surface. Don't re-add it here — flutter_launcher_icons
+         writes it to colors.xml by default, but that produces a duplicate
+         resource and fails the Gradle build. -->
+
 </resources>

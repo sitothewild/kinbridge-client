@@ -133,7 +133,16 @@ dependency_overrides:
 
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
+  # Legacy icon (Android < 8, iOS, desktop, web). Full-bleed amber tile
+  # with cream bridge+heart baked in — see res/brand/kinbridge-icon-tile.svg.
   image_path: "../res/icon.png"
+  # Android 8+ adaptive icon: layered. Background color matches
+  # res/values/ic_launcher_background.xml. Foreground is the
+  # cream-on-transparent bridge+heart, padded to the 66.7% adaptive
+  # safe zone in its source SVG (res/brand/kinbridge-icon-fg.svg) so
+  # circle/squircle/teardrop launcher masks don't clip the art.
+  adaptive_icon_background: "#E89652"
+  adaptive_icon_foreground: "../res/icon-fg.png"
   remove_alpha_ios: true
   android: true
   ios: true

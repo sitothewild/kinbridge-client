@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Adaptive-icon foreground layer. Drawn on top of the amber
+       background (#E89652) defined via res/values/ic_launcher_background.xml
+       (and re-emitted by flutter_launcher_icons from the pubspec
+       adaptive_icon_background key). Cream stroke to match the
+       existing kinbridge-icon-tile.svg brand palette (#fffaf2).
+
+       Canvas is 48×48 with the art translated +8 in both axes,
+       putting the 32×32 design into a 66.7% center zone — this is
+       the adaptive-icon safe zone (72dp of a 108dp canvas) so
+       circle/squircle/teardrop launcher masks never clip the art. -->
+  <g transform="translate(8 8)" stroke="#fffaf2" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 22 C 9 8, 23 8, 28 22"/>
+    <path d="M10 22 L10 12.5"/>
+    <path d="M22 22 L22 12.5"/>
+    <path d="M3 22 L29 22"/>
+    <path d="M16 11.4 C 14.6 9.6, 12 10, 12 12.1 C 12 13.7, 14 15.1, 16 16.4 C 18 15.1, 20 13.7, 20 12.1 C 20 10, 17.4 9.6, 16 11.4 Z"
+          fill="#fffaf2" stroke="#fffaf2" stroke-width="1"/>
+  </g>
+</svg>
