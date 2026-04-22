@@ -187,6 +187,15 @@ void runMobileApp() async {
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   await initUniLinks();
+  // KinBridge: warm-start deep link listener. initUniLinks handles the
+  // cold-boot getInitialLink case; without listenUniLinks, any URI
+  // delivered via onNewIntent after the app is already running —
+  // including the kinbridge://auth-callback that completes Google
+  // OAuth — never surfaces to Flutter. connection_page.dart installs
+  // its own listener, but only while that (RustDesk-legacy) page is
+  // mounted, so the onboarding / KBShell / SignInPage flows never
+  // received deep links on mobile without this.
+  listenUniLinks();
 }
 
 void runMultiWindow(
