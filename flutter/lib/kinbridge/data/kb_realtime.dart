@@ -131,6 +131,56 @@ class KBRealtime {
     return ctrl.stream;
   }
 
+  /// INSERTs on `sessions` where `helper_id = current user`. Fires when
+  /// an owner taps "Need a hand?" and creates a session with this
+  /// helper as the target. The helper-side UI uses this to pop a
+  /// doorbell-style notification overlay so the helper can jump in
+  /// without having to poll or refresh their home screen.
+  ///
+  /// Emits a minimal [KBIncomingSession] pulled straight from the
+  /// realtime payload (no joins — the consumer fetches device / owner
+  /// metadata lazily when the user acts on the notification).
+  static Stream<KBIncomingSession> incomingSessionsStream() {
+    final uid = KBSupabase.userId;
+    if (uid == null) {
+      return const Stream<KBIncomingSession>.empty();
+    }
+    final ctrl = StreamController<KBIncomingSession>();
+    final channel = KBSupabase.client.channel('helper-inbox:$uid')
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'sessions',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'helper_id',
+          value: uid,
+        ),
+        callback: (payload) {
+          try {
+            final row = payload.newRecord;
+            final ev = KBIncomingSession(
+              sessionId: row['id'] as String,
+              deviceId: row['device_id'] as String,
+              helperId: row['helper_id'] as String,
+              startedAt: _ts(row['started_at']),
+            );
+            if (!ctrl.isClosed) ctrl.add(ev);
+          } catch (err, st) {
+            if (kDebugMode) {
+              debugPrint('kb.realtime.helperInbox: $err\n$st');
+            }
+          }
+        },
+      )
+      ..subscribe();
+
+    ctrl.onCancel = () async {
+      await KBSupabase.client.removeChannel(channel);
+    };
+    return ctrl.stream;
+  }
+
   // ---------------------------------------------------------------------------
   // Row mappers (kept local — parallel to SupabaseKBRepository's; can be
   // extracted if they diverge). Intentionally tolerant: any shape hiccup is
@@ -217,6 +267,22 @@ class KBRealtime {
     if (v is String) return DateTime.tryParse(v)?.toLocal();
     return null;
   }
+}
+
+/// A brand-new `sessions` INSERT where the current user is the
+/// helper. Minimal shape — just enough to decide whether to render the
+/// doorbell and which device to fetch context for.
+class KBIncomingSession {
+  KBIncomingSession({
+    required this.sessionId,
+    required this.deviceId,
+    required this.helperId,
+    required this.startedAt,
+  });
+  final String sessionId;
+  final String deviceId;
+  final String helperId;
+  final DateTime? startedAt;
 }
 
 /// Snapshot of the lifecycle columns on `sessions` when they change. The

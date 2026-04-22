@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/kb_server_fn.dart';
+import '../data/kb_supabase.dart';
 import '../theme/kb_tokens.dart';
 import '../widgets/kb_avatar.dart';
 
@@ -88,6 +89,7 @@ class _InviteAcceptPageState extends State<InviteAcceptPage> {
             if (_successDeviceId != null) {
               return _SuccessState(
                 deviceName: look.deviceName ?? 'this device',
+                inviterName: look.inviterName ?? 'your family',
                 onDone: () => Navigator.of(context).pop(),
               );
             }
@@ -263,22 +265,43 @@ String _relativeFuture(DateTime when) {
 }
 
 class _SuccessState extends StatelessWidget {
-  const _SuccessState({required this.deviceName, required this.onDone});
+  const _SuccessState({
+    required this.deviceName,
+    required this.inviterName,
+    required this.onDone,
+  });
+  final String inviterName;
   final String deviceName;
   final VoidCallback onDone;
+
+  String _selfInitial() {
+    final me = KBSupabase.client.auth.currentUser;
+    final name = (me?.userMetadata?['display_name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name.substring(0, 1).toUpperCase();
+    final email = me?.email;
+    if (email != null && email.isNotEmpty) return email.substring(0, 1).toUpperCase();
+    return 'S';
+  }
+
+  String _inviterInitial() {
+    return inviterName.isNotEmpty
+        ? inviterName.substring(0, 1).toUpperCase()
+        : 'M';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(KB.s6, KB.s6, KB.s6, KB.s6),
+      padding: const EdgeInsets.fromLTRB(KB.s6, KB.s5, KB.s6, KB.s6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Spacer(),
+          const SizedBox(height: KB.s4),
+          // Celebration mark: sage radial behind a checkmark
           Center(
             child: Container(
-              width: 96,
-              height: 96,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -287,23 +310,157 @@ class _SuccessState extends StatelessWidget {
                 ),
               ),
               alignment: Alignment.center,
-              child:
-                  const Icon(Icons.check_rounded, color: KB.surface, size: 40),
+              child: const Icon(Icons.check_rounded,
+                  color: KB.surface, size: 36),
             ),
           ),
-          const SizedBox(height: KB.s6),
-          Text("You're approved.",
+          const SizedBox(height: KB.s5),
+          Text("Pairing complete",
+              textAlign: TextAlign.center, style: KBText.overline()),
+          const SizedBox(height: KB.s2),
+          Text("You're connected with $inviterName",
               textAlign: TextAlign.center, style: KBText.title()),
           const SizedBox(height: KB.s3),
           Text(
-            "You can now help $deviceName any time. They'll see you in their helpers list.",
+            "$inviterName approved you just now. You can offer help any time $inviterName asks for it on $deviceName.",
             textAlign: TextAlign.center,
             style: KBText.body(color: KB.muted),
           ),
-          const Spacer(),
-          _PrimaryButton(label: "Open KinBridge", onTap: onDone),
+          const SizedBox(height: KB.s6),
+          _AvatarBridge(
+            selfInitial: _selfInitial(),
+            selfLabel: "You",
+            selfRole: "Helper",
+            peerInitial: _inviterInitial(),
+            peerLabel: inviterName,
+            peerRole: "Pixel 8",
+          ),
+          const SizedBox(height: KB.s6),
+          Container(
+            padding: const EdgeInsets.all(KB.s5),
+            decoration: BoxDecoration(
+              color: KB.surface,
+              borderRadius: BorderRadius.circular(KB.radiusCard),
+              border: Border.all(color: KB.hairline, width: 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("HERE'S WHAT YOU CAN DO", style: KBText.overline()),
+                const SizedBox(height: KB.s3),
+                _Bullet(
+                    icon: Icons.visibility_outlined,
+                    text: "View $inviterName's screen when they say yes."),
+                const SizedBox(height: KB.s3),
+                _Bullet(
+                    icon: Icons.touch_app_outlined,
+                    text: "Send messages and gentle taps."),
+                const SizedBox(height: KB.s3),
+                _Bullet(
+                    icon: Icons.bolt_outlined,
+                    text: "Help during their active session."),
+              ],
+            ),
+          ),
+          const SizedBox(height: KB.s3),
+          Text(
+            "We'll notify you the moment $inviterName asks for help.",
+            textAlign: TextAlign.center,
+            style: KBText.caption(color: KB.muted),
+          ),
+          const SizedBox(height: KB.s5),
+          _PrimaryButton(label: "Done — back to dashboard", onTap: onDone),
         ],
       ),
+    );
+  }
+}
+
+/// Avatar ↔ sage-gradient line ↔ Avatar. Visual beat for spec p10.
+class _AvatarBridge extends StatelessWidget {
+  const _AvatarBridge({
+    required this.selfInitial,
+    required this.selfLabel,
+    required this.selfRole,
+    required this.peerInitial,
+    required this.peerLabel,
+    required this.peerRole,
+  });
+  final String selfInitial;
+  final String selfLabel;
+  final String selfRole;
+  final String peerInitial;
+  final String peerLabel;
+  final String peerRole;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _Node(
+            initial: selfInitial,
+            label: selfLabel,
+            role: selfRole,
+            tint: KB.sage),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: KB.s3),
+            child: Container(
+              height: 2,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [KB.sage, KB.amber],
+                ),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ),
+        ),
+        _Node(
+            initial: peerInitial,
+            label: peerLabel,
+            role: peerRole,
+            tint: KB.amber),
+      ],
+    );
+  }
+}
+
+class _Node extends StatelessWidget {
+  const _Node({
+    required this.initial,
+    required this.label,
+    required this.role,
+    required this.tint,
+  });
+  final String initial;
+  final String label;
+  final String role;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: tint.withOpacity(0.15),
+            shape: BoxShape.circle,
+            border: Border.all(color: tint, width: 1.5),
+          ),
+          alignment: Alignment.center,
+          child: Text(initial, style: KBText.heading(color: tint)),
+        ),
+        const SizedBox(height: KB.s2),
+        Text(label,
+            style: KBText.label(), overflow: TextOverflow.ellipsis),
+        Text(role,
+            style: KBText.caption(color: KB.muted),
+            overflow: TextOverflow.ellipsis),
+      ],
     );
   }
 }
