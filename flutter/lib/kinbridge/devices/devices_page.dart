@@ -418,23 +418,45 @@ class _AddDeviceDialogState extends State<_AddDeviceDialog> {
       _busy = true;
       _error = null;
     });
+    // Preferred path: Lovable's createDevice server-fn, which can run
+    // any side effects (default preferences, audit logging, etc.)
+    // server-side. On 500 / network error we fall through to a direct
+    // Supabase insert — RLS policy "Owners manage their devices"
+    // covers `INSERT WITH CHECK (owner_id = auth.uid())` so the write
+    // succeeds for the caller's own rows. Lovable is chasing the 500
+    // root cause separately; the fallback stops us from being blocked.
     try {
       await KBServerFn.createDevice(name: name, platform: _platform);
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } on KBServerFnError catch (err) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = err.message.isEmpty
-            ? "Couldn't register the device. Try again."
-            : err.message;
+      return;
+    } catch (err) {
+      debugPrint('kb.devices: createDevice server-fn failed ($err) — '
+          'falling back to direct Supabase insert');
+    }
+
+    try {
+      final uid = KBSupabase.userId;
+      if (uid == null) {
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _error = "Sign in again to register a device.";
+        });
+        return;
+      }
+      await KBSupabase.client.from('devices').insert({
+        'owner_id': uid,
+        'name': name,
+        'platform': _platform,
       });
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
     } catch (err) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = "Couldn't register the device. Try again.";
+        _error = "Couldn't register the device. $err";
       });
     }
   }
