@@ -7,6 +7,7 @@ import '../helper/helper_home_page.dart';
 import '../history/history_page.dart';
 import '../session/kb_deep_link.dart';
 import '../data/kb_supabase.dart';
+import '../devices/devices_page.dart';
 import 'kb_account_page.dart';
 
 /// Runtime role. Phase V: hydrated from Supabase `user_roles`.
@@ -94,11 +95,7 @@ class _KBShellState extends State<KBShell> {
       icon: Icons.devices_other_outlined,
       activeIcon: Icons.devices_other_rounded,
       label: "Devices",
-      build: () => const _PlaceholderPage(
-        title: "Devices",
-        subtitle: "Your paired phones, tablets, and helpers.",
-        eyebrow: "COMING SOON",
-      ),
+      build: () => const DevicesPage(),
     ),
     _KBTab(
       icon: Icons.history_outlined,

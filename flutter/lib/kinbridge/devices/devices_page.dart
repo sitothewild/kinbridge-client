@@ -1,0 +1,632 @@
+// Devices tab — list the caller's registered devices and add new ones.
+//
+// Today this is a v1 surface: list + add. Last-seen / online-dot will
+// light up once Lovable's heartbeat endpoint lands. Revoke is deferred
+// until a revokeDevice server-fn exists on the backend.
+//
+// Replaces the _PlaceholderPage that used to live on the Devices tab
+// in KBShell. Unblocks the Owner Home "Need a hand?" flow — that
+// button requires at least one registered device before it can fire
+// a help request.
+
+import 'package:flutter/material.dart';
+
+import '../data/kb_models.dart';
+import '../data/kb_repository.dart';
+import '../data/kb_server_fn.dart';
+import '../data/kb_supabase.dart';
+import '../theme/kb_tokens.dart';
+
+class DevicesPage extends StatefulWidget {
+  const DevicesPage({super.key});
+
+  @override
+  State<DevicesPage> createState() => _DevicesPageState();
+}
+
+class _DevicesPageState extends State<DevicesPage> {
+  late Future<List<KBDevice>> _devicesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _devicesFuture = _fetch();
+  }
+
+  Future<List<KBDevice>> _fetch() async {
+    final uid = KBSupabase.userId;
+    if (uid == null) return const <KBDevice>[];
+    return KBRepository.instance.listDevices();
+  }
+
+  Future<void> _refresh() async {
+    final fresh = _fetch();
+    setState(() => _devicesFuture = fresh);
+    await fresh;
+  }
+
+  Future<void> _openAddDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const _AddDeviceDialog(),
+    );
+    if (created == true) await _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: KB.parchment,
+      child: SafeArea(
+        child: RefreshIndicator(
+          color: KB.amber,
+          onRefresh: _refresh,
+          child: FutureBuilder<List<KBDevice>>(
+            future: _devicesFuture,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Center(
+                    child: CircularProgressIndicator(color: KB.amber));
+              }
+              if (snap.hasError) {
+                return _ErrorState(
+                    onRetry: _refresh, error: snap.error.toString());
+              }
+              final devices = snap.data ?? const <KBDevice>[];
+              if (devices.isEmpty) {
+                return _EmptyState(onAdd: _openAddDialog);
+              }
+              return _DevicesList(
+                devices: devices,
+                onAdd: _openAddDialog,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Empty state — first-run CTA, no FAB clutter
+// ---------------------------------------------------------------------------
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.onAdd});
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(KB.s6, KB.s5, KB.s6, KB.s6),
+      children: [
+        Text("DEVICES", style: KBText.overline()),
+        const SizedBox(height: KB.s2),
+        Text("Your paired phones & tablets", style: KBText.title()),
+        const SizedBox(height: KB.s3),
+        Text(
+          "Register a device so helpers can see it and jump in when you ask for help. Start with this phone — give it a name your family will recognize.",
+          style: KBText.body(color: KB.muted),
+        ),
+        const SizedBox(height: KB.s6),
+        Container(
+          padding: const EdgeInsets.all(KB.s5),
+          decoration: BoxDecoration(
+            color: KB.surface,
+            borderRadius: BorderRadius.circular(KB.radiusField),
+            border: Border.all(color: KB.hairline, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.phone_android_rounded,
+                      color: KB.amber, size: 28),
+                  const SizedBox(width: KB.s3),
+                  Expanded(
+                    child: Text("Add your first device",
+                        style: KBText.heading()),
+                  ),
+                ],
+              ),
+              const SizedBox(height: KB.s3),
+              Text(
+                "Give it a friendly name — \"Mom's phone\" or \"Living room tablet\" — so helpers know what they're connecting to.",
+                style: KBText.body(color: KB.muted),
+              ),
+              const SizedBox(height: KB.s4),
+              SizedBox(
+                width: double.infinity,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(KB.radiusPill),
+                    onTap: onAdd,
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        gradient: KB.amberGradient,
+                        borderRadius: BorderRadius.circular(KB.radiusPill),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: KB.s4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text("Add device",
+                                style: KBText.label(color: KB.surface)),
+                            const SizedBox(width: KB.s2),
+                            const Icon(Icons.arrow_forward_rounded,
+                                color: KB.surface, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// List state
+// ---------------------------------------------------------------------------
+
+class _DevicesList extends StatelessWidget {
+  const _DevicesList({required this.devices, required this.onAdd});
+  final List<KBDevice> devices;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ListView(
+          padding: const EdgeInsets.fromLTRB(KB.s6, KB.s5, KB.s6, 100),
+          children: [
+            Text("DEVICES", style: KBText.overline()),
+            const SizedBox(height: KB.s2),
+            Text("Your paired phones & tablets", style: KBText.title()),
+            const SizedBox(height: KB.s5),
+            for (final d in devices) ...[
+              _DeviceCard(device: d),
+              const SizedBox(height: KB.s3),
+            ],
+          ],
+        ),
+        Positioned(
+          right: KB.s5,
+          bottom: KB.s5,
+          child: _AddFab(onTap: onAdd),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeviceCard extends StatelessWidget {
+  const _DeviceCard({required this.device});
+  final KBDevice device;
+
+  IconData _iconFor(String platform) {
+    switch (platform) {
+      case 'android':
+        return Icons.phone_android_rounded;
+      case 'ios':
+        return Icons.phone_iphone_rounded;
+      default:
+        return Icons.devices_other_rounded;
+    }
+  }
+
+  String _subtitleFor() {
+    if (device.online) return "online now";
+    final ls = device.lastSeen;
+    if (ls == null) return "not seen yet";
+    final diff = DateTime.now().difference(ls);
+    if (diff.inMinutes < 1) return "just now";
+    if (diff.inHours < 1) return "${diff.inMinutes} min ago";
+    if (diff.inDays < 1) return "${diff.inHours} hr ago";
+    return "${diff.inDays} days ago";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(KB.s4),
+      decoration: BoxDecoration(
+        color: KB.surface,
+        borderRadius: BorderRadius.circular(KB.radiusField),
+        border: Border.all(color: KB.hairline, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: KB.amber.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(_iconFor(device.platform),
+                color: KB.amber, size: 22),
+          ),
+          const SizedBox(width: KB.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(device.name,
+                    style: KBText.label(),
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: device.online ? KB.sage : KB.muted,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: KB.s2),
+                    Text(_subtitleFor(),
+                        style: KBText.caption(color: KB.muted)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddFab extends StatelessWidget {
+  const _AddFab({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(KB.radiusPill),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: KB.amberGradient,
+            borderRadius: BorderRadius.circular(KB.radiusPill),
+            boxShadow: [
+              BoxShadow(
+                color: KB.amber.withOpacity(0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Padding(
+            padding:
+                EdgeInsets.symmetric(horizontal: KB.s5, vertical: KB.s4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, color: KB.surface, size: 20),
+                SizedBox(width: KB.s2),
+                Text("Add device",
+                    style: TextStyle(
+                        color: KB.surface,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Add dialog — name + platform picker, calls KBServerFn.createDevice
+// ---------------------------------------------------------------------------
+
+class _AddDeviceDialog extends StatefulWidget {
+  const _AddDeviceDialog();
+
+  @override
+  State<_AddDeviceDialog> createState() => _AddDeviceDialogState();
+}
+
+class _AddDeviceDialogState extends State<_AddDeviceDialog> {
+  final _name = TextEditingController();
+  String _platform = 'android';
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = "Give the device a name.");
+      return;
+    }
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await KBServerFn.createDevice(name: name, platform: _platform);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on KBServerFnError catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = err.message.isEmpty
+            ? "Couldn't register the device. Try again."
+            : err.message;
+      });
+    } catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = "Couldn't register the device. Try again.";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: KB.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KB.radiusCard),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(KB.s5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("NEW DEVICE", style: KBText.overline()),
+            const SizedBox(height: KB.s2),
+            Text("Register a phone or tablet", style: KBText.title()),
+            const SizedBox(height: KB.s3),
+            Text(
+              "Pick a name helpers will recognize. You can rename it later.",
+              style: KBText.body(color: KB.muted),
+            ),
+            const SizedBox(height: KB.s5),
+            Container(
+              decoration: BoxDecoration(
+                color: KB.parchment,
+                borderRadius: BorderRadius.circular(KB.radiusField),
+                border: Border.all(color: KB.hairline, width: 1),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: KB.s3),
+              child: TextField(
+                controller: _name,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                style: KBText.body(color: KB.deepInk),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: KB.s4),
+                  hintText: "Mom's phone",
+                  hintStyle: KBText.body(color: KB.muted),
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
+            ),
+            const SizedBox(height: KB.s4),
+            Text("PLATFORM", style: KBText.overline()),
+            const SizedBox(height: KB.s2),
+            Row(
+              children: [
+                _PlatformChip(
+                  label: "Android",
+                  selected: _platform == 'android',
+                  onTap: () => setState(() => _platform = 'android'),
+                ),
+                const SizedBox(width: KB.s2),
+                _PlatformChip(
+                  label: "iOS",
+                  selected: _platform == 'ios',
+                  onTap: () => setState(() => _platform = 'ios'),
+                ),
+                const SizedBox(width: KB.s2),
+                _PlatformChip(
+                  label: "Other",
+                  selected: _platform == 'other',
+                  onTap: () => setState(() => _platform = 'other'),
+                ),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: KB.s4),
+              Container(
+                padding: const EdgeInsets.all(KB.s3),
+                decoration: BoxDecoration(
+                  color: KB.coral.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(KB.radiusField),
+                  border:
+                      Border.all(color: KB.coral.withOpacity(0.4), width: 1),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        color: KB.coral, size: 18),
+                    const SizedBox(width: KB.s2),
+                    Expanded(
+                      child: Text(_error!,
+                          style: KBText.body(color: KB.deepInk)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: KB.s5),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed:
+                      _busy ? null : () => Navigator.of(context).pop(false),
+                  child: Text("Cancel", style: KBText.label(color: KB.muted)),
+                ),
+                const SizedBox(width: KB.s2),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(KB.radiusPill),
+                    onTap: _busy ? null : _submit,
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        gradient: _busy ? null : KB.amberGradient,
+                        color: _busy ? KB.hairline : null,
+                        borderRadius: BorderRadius.circular(KB.radiusPill),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: KB.s5, vertical: KB.s3),
+                        child: _busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    color: KB.muted, strokeWidth: 2))
+                            : Text("Add",
+                                style: KBText.label(color: KB.surface)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlatformChip extends StatelessWidget {
+  const _PlatformChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(KB.radiusPill),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: KB.s3),
+            decoration: BoxDecoration(
+              color: selected ? KB.amber.withOpacity(0.15) : KB.parchment,
+              borderRadius: BorderRadius.circular(KB.radiusPill),
+              border: Border.all(
+                color: selected ? KB.amber : KB.hairline,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: KBText.label(
+                    color: selected ? KB.amber : KB.muted),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Error state
+// ---------------------------------------------------------------------------
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.onRetry, required this.error});
+  final VoidCallback onRetry;
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(KB.s6, KB.s5, KB.s6, KB.s6),
+      children: [
+        Text("DEVICES", style: KBText.overline()),
+        const SizedBox(height: KB.s2),
+        Text("Couldn't load your devices", style: KBText.title()),
+        const SizedBox(height: KB.s3),
+        Text(
+          "Pull down to retry, or check your connection.",
+          style: KBText.body(color: KB.muted),
+        ),
+        const SizedBox(height: KB.s4),
+        Container(
+          padding: const EdgeInsets.all(KB.s3),
+          decoration: BoxDecoration(
+            color: KB.coral.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(KB.radiusField),
+            border: Border.all(color: KB.coral.withOpacity(0.3), width: 1),
+          ),
+          child: Text(error,
+              style: KBText.caption(color: KB.deepInk)),
+        ),
+        const SizedBox(height: KB.s5),
+        SizedBox(
+          width: double.infinity,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(KB.radiusPill),
+              onTap: onRetry,
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: KB.amberGradient,
+                  borderRadius: BorderRadius.circular(KB.radiusPill),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: KB.s4),
+                  child: Center(
+                    child: Text("Try again",
+                        style: KBText.label(color: KB.surface)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
