@@ -9,6 +9,7 @@
 // button requires at least one registered device before it can fire
 // a help request.
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../data/kb_models.dart';
@@ -16,6 +17,7 @@ import '../data/kb_repository.dart';
 import '../data/kb_server_fn.dart';
 import '../data/kb_supabase.dart';
 import '../theme/kb_tokens.dart';
+import 'device_detail_page.dart';
 
 class DevicesPage extends StatefulWidget {
   const DevicesPage({super.key});
@@ -46,11 +48,38 @@ class _DevicesPageState extends State<DevicesPage> {
   }
 
   Future<void> _openAddDialog() async {
+    // Suggest a sensible default name so the user isn't staring at an
+    // empty text field. device_info_plus returns the phone's marketing
+    // model on Android ("Pixel 9") / iOS; fallback is generic.
+    final suggestion = await _proposeDeviceName();
+    if (!mounted) return;
     final created = await showDialog<bool>(
       context: context,
-      builder: (ctx) => const _AddDeviceDialog(),
+      builder: (ctx) => _AddDeviceDialog(suggestedName: suggestion),
     );
     if (created == true) await _refresh();
+  }
+
+  Future<void> _openDetail(KBDevice device) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => DeviceDetailPage(device: device),
+      ),
+    );
+    if (changed == true) await _refresh();
+  }
+
+  Future<String?> _proposeDeviceName() async {
+    try {
+      final info = DeviceInfoPlugin();
+      final android = await info.androidInfo;
+      // Prefer the marketing name (e.g. "Pixel 9") over device codename.
+      final model = android.model.trim();
+      if (model.isEmpty) return null;
+      return "$model";
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -79,6 +108,7 @@ class _DevicesPageState extends State<DevicesPage> {
               return _DevicesList(
                 devices: devices,
                 onAdd: _openAddDialog,
+                onOpen: _openDetail,
               );
             },
           ),
@@ -179,9 +209,14 @@ class _EmptyState extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _DevicesList extends StatelessWidget {
-  const _DevicesList({required this.devices, required this.onAdd});
+  const _DevicesList({
+    required this.devices,
+    required this.onAdd,
+    required this.onOpen,
+  });
   final List<KBDevice> devices;
   final VoidCallback onAdd;
+  final void Function(KBDevice) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -195,7 +230,7 @@ class _DevicesList extends StatelessWidget {
             Text("Your paired phones & tablets", style: KBText.title()),
             const SizedBox(height: KB.s5),
             for (final d in devices) ...[
-              _DeviceCard(device: d),
+              _DeviceCard(device: d, onTap: () => onOpen(d)),
               const SizedBox(height: KB.s3),
             ],
           ],
@@ -211,8 +246,9 @@ class _DevicesList extends StatelessWidget {
 }
 
 class _DeviceCard extends StatelessWidget {
-  const _DeviceCard({required this.device});
+  const _DeviceCard({required this.device, required this.onTap});
   final KBDevice device;
+  final VoidCallback onTap;
 
   IconData _iconFor(String platform) {
     switch (platform) {
@@ -239,53 +275,63 @@ class _DeviceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(KB.s4),
       decoration: BoxDecoration(
         color: KB.surface,
         borderRadius: BorderRadius.circular(KB.radiusField),
         border: Border.all(color: KB.hairline, width: 1),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: KB.amber.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Icon(_iconFor(device.platform),
-                color: KB.amber, size: 22),
-          ),
-          const SizedBox(width: KB.s3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(KB.radiusField),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(KB.s4),
+            child: Row(
               children: [
-                Text(device.name,
-                    style: KBText.label(),
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: device.online ? KB.sage : KB.muted,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: KB.s2),
-                    Text(_subtitleFor(),
-                        style: KBText.caption(color: KB.muted)),
-                  ],
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: KB.amber.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(_iconFor(device.platform),
+                      color: KB.amber, size: 22),
                 ),
+                const SizedBox(width: KB.s3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(device.name,
+                          style: KBText.label(),
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: device.online ? KB.sage : KB.muted,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: KB.s2),
+                          Text(_subtitleFor(),
+                              style: KBText.caption(color: KB.muted)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: KB.muted),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -341,14 +387,16 @@ class _AddFab extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _AddDeviceDialog extends StatefulWidget {
-  const _AddDeviceDialog();
+  const _AddDeviceDialog({this.suggestedName});
+  final String? suggestedName;
 
   @override
   State<_AddDeviceDialog> createState() => _AddDeviceDialogState();
 }
 
 class _AddDeviceDialogState extends State<_AddDeviceDialog> {
-  final _name = TextEditingController();
+  late final TextEditingController _name =
+      TextEditingController(text: widget.suggestedName ?? '');
   String _platform = 'android';
   bool _busy = false;
   String? _error;

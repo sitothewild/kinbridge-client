@@ -55,6 +55,43 @@ class KBRedeemCodeResult {
   bool get isPairing => mode == 'pairing';
 }
 
+/// Response from [KBServerFn.issueInstallToken]. `token` goes into
+/// `kinbridge://install?token=<token>` for deep-link redemption;
+/// `installCode` is a short 6-digit alternative for manual entry.
+class KBInstallTokenResult {
+  KBInstallTokenResult({
+    required this.id,
+    required this.token,
+    required this.installCode,
+    required this.expiresAt,
+  });
+  final String id;
+  final String token;
+  final String installCode;
+  final DateTime? expiresAt;
+
+  /// Full deep link the owner shares with the not-yet-registered device.
+  String get installUrl => 'https://kinbridge.support/install/$token';
+}
+
+/// Response from [KBServerFn.createHelperInvite]. `token` goes into
+/// the `https://kinbridge.support/invite/<token>` App Link that the
+/// helper opens.
+class KBHelperInviteResult {
+  KBHelperInviteResult({
+    required this.id,
+    required this.token,
+    required this.deviceName,
+    required this.expiresAt,
+  });
+  final String id;
+  final String token;
+  final String deviceName;
+  final DateTime? expiresAt;
+
+  String get inviteUrl => 'https://kinbridge.support/invite/$token';
+}
+
 /// Lovable's `devices` row shape returned by [KBServerFn.redeemInstallToken].
 class KBDeviceRow {
   KBDeviceRow({
@@ -333,6 +370,63 @@ class KBServerFn {
       'platform': platform,
     });
     return (r['device'] as Map).cast<String, dynamic>();
+  }
+
+  /// Owner-side: issue an install-token pair for a not-yet-registered device
+  /// (e.g. mom wants to send the KinBridge install link to daughter's
+  /// tablet). Returns both the long-form `token` (used in the
+  /// `kinbridge://install?token=…` deep link) and a short 6-digit
+  /// `installCode` for manual entry. Per Lovable's
+  /// `devices.functions.ts → issueInstallToken`.
+  static Future<KBInstallTokenResult> issueInstallToken({
+    required String proposedName,
+    String proposedPlatform = 'android',
+  }) async {
+    final r = await _post('issueInstallToken', {
+      'proposedName': proposedName,
+      'proposedPlatform': proposedPlatform,
+    });
+    return KBInstallTokenResult(
+      id: r['id'] as String,
+      token: r['token'] as String,
+      installCode: r['installCode'] as String? ?? '',
+      expiresAt: r['expiresAt'] is String
+          ? DateTime.tryParse(r['expiresAt'] as String)?.toLocal()
+          : null,
+    );
+  }
+
+  /// Owner-side: generate a helper invite for one of their devices.
+  /// Response: `{id, token, expiresAt, deviceName}` per
+  /// `invites.functions.ts → createHelperInvite`. The `token` is embedded
+  /// into `https://kinbridge.support/invite/<token>` which the helper
+  /// opens to accept.
+  static Future<KBHelperInviteResult> createHelperInvite({
+    required String deviceId,
+    String? note,
+  }) async {
+    final r = await _post('createHelperInvite', {
+      'deviceId': deviceId,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    });
+    return KBHelperInviteResult(
+      id: r['id'] as String,
+      token: r['token'] as String,
+      deviceName: r['deviceName'] as String? ?? 'device',
+      expiresAt: r['expiresAt'] is String
+          ? DateTime.tryParse(r['expiresAt'] as String)?.toLocal()
+          : null,
+    );
+  }
+
+  /// Owner-side: revoke a pending helper invite.
+  static Future<void> revokeHelperInvite({required String inviteId}) async {
+    await _post('revokeHelperInvite', {'inviteId': inviteId});
+  }
+
+  /// Owner-side: revoke an outstanding install token (before it's redeemed).
+  static Future<void> revokeInstallToken({required String tokenId}) async {
+    await _post('revokeInstallToken', {'tokenId': tokenId});
   }
 
   // ---------------------------------------------------------------------------
