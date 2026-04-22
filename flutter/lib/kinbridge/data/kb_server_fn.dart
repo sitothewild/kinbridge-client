@@ -205,13 +205,21 @@ class KBServerFn {
       final decoded = jsonDecode(res.body);
       if (decoded is Map && decoded['error'] is String) {
         message = decoded['error'] as String;
+      } else if (decoded is Map && decoded['message'] is String) {
+        message = decoded['message'] as String;
       }
     } catch (_) {
       /* body wasn't JSON */
     }
-    if (kDebugMode) {
-      debugPrint('kb.serverFn: $exportName failed — $message');
-    }
+    // Log failures in every build, not just debug. Release APKs in the
+    // field are exactly when we most need the post-mortem — and the
+    // log body never contains auth material (we redact before send
+    // and the server never echoes our token).
+    final bodyPreview = res.body.length > 400
+        ? '${res.body.substring(0, 400)}…'
+        : res.body;
+    debugPrint(
+        'kb.serverFn: $exportName failed — ${res.statusCode} $message | body=$bodyPreview');
     throw KBServerFnError(res.statusCode, message, raw: res.body);
   }
 
