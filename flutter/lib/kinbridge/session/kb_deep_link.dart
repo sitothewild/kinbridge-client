@@ -226,6 +226,7 @@ class KBDeepLink {
           peerInitials: peerInitials,
           peerDevice: session?.peerDevice,
           sessionId: sessionId,
+          devicePeerId: session?.devicePeerId,
         ),
       ),
     );
@@ -313,6 +314,9 @@ class KBDeepLink {
                   : '?',
               peerDevice: deviceName,
               sessionId: result.sessionId,
+              // QuickConnect doesn't surface peer_id in redemption
+              // response. Surface renders as idle/connecting until a
+              // subsequent repo fetch populates it (V-b task).
             ),
           ),
         );

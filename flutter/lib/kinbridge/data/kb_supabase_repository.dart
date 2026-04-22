@@ -63,7 +63,8 @@ class SupabaseKBRepository implements KBRepository {
       name,
       owner_id,
       platform,
-      last_seen
+      last_seen,
+      peer_id
     )
   ''';
 
@@ -171,6 +172,8 @@ class SupabaseKBRepository implements KBRepository {
         endedAt: _ts(row['ended_at']),
         summary: summary,
         direction: direction,
+        devicePeerId: device['peer_id'] as String?,
+        deviceId: device['id'] as String?,
       );
     } catch (err, st) {
       debugPrint('kb.supabase: failed to map session row: $err\n$st');
@@ -356,7 +359,8 @@ class SupabaseKBRepository implements KBRepository {
       owner_id,
       name,
       platform,
-      last_seen
+      last_seen,
+      peer_id
     ''') as List<dynamic>;
     // Profiles fetched separately — see [_fetchProfiles] comment.
     final profiles = await _fetchProfiles(
@@ -377,6 +381,7 @@ class SupabaseKBRepository implements KBRepository {
         name: (row['name'] as String?) ?? 'Device',
         platform: (row['platform'] as String?) ?? 'other',
         lastSeen: _ts(row['last_seen']),
+        peerId: row['peer_id'] as String?,
       );
     }).toList();
   }

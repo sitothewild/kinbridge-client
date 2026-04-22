@@ -88,6 +88,8 @@ class KBSession {
     required this.endedAt,
     required this.summary,
     required this.direction,
+    this.devicePeerId,
+    this.deviceId,
   });
 
   final String id;
@@ -97,6 +99,17 @@ class KBSession {
   final DateTime startedAt;
   final DateTime? approvedAt;
   final DateTime? endedAt;
+
+  /// RustDesk `devices.peer_id` of the device being helped. Helper
+  /// needs this to open the remote view via `gFFI.start(peerId, …)`.
+  /// Null when the device hasn't completed install-token redemption
+  /// yet (placeholder row without a registered agent).
+  final String? devicePeerId;
+
+  /// `sessions.device_id` — Supabase foreign key. Used by the helper
+  /// to correlate a live session with the `devices` row when the
+  /// detail page needs to refetch.
+  final String? deviceId;
 
   /// Mapped from Postgres `sessions.notes`. First line of the field, or a
   /// synthesized fallback ("Helped with something") when notes are empty.
@@ -223,6 +236,7 @@ class KBDevice {
     required this.name,
     required this.platform,
     required this.lastSeen,
+    required this.peerId,
   });
 
   final String id;
@@ -237,6 +251,14 @@ class KBDevice {
 
   /// Mapped from Postgres `devices.last_seen` (nullable).
   final DateTime? lastSeen;
+
+  /// RustDesk peer ID written at install-token redemption (Lovable's
+  /// `registerDevice` endpoint sets `devices.peer_id` from the
+  /// device-side agent's `peer_id`). Required for the helper to open
+  /// a remote-view session via `gFFI.start(peerId, ...)`. Null when
+  /// the owner hasn't completed install-token redemption yet — the
+  /// device row exists as a placeholder but has no agent registered.
+  final String? peerId;
 
   /// Derived: fresh heartbeat within the last 60s counts as online.
   bool get online {

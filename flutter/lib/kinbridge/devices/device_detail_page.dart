@@ -114,6 +114,7 @@ class _DeviceDetailPageState extends State<DeviceDetailPage> {
           name: newName,
           platform: _device.platform,
           lastSeen: _device.lastSeen,
+          peerId: _device.peerId,
         );
       });
     } catch (err) {

@@ -62,14 +62,16 @@ class _HelperHomePageState extends State<HelperHomePage> {
     String ownerName = 'your family';
     String deviceName = 'device';
     String ownerInitials = '?';
+    String? devicePeerId;
     try {
       final device = await KBSupabase.client
           .from('devices')
-          .select('name, owner_id')
+          .select('name, owner_id, peer_id')
           .eq('id', ev.deviceId)
           .maybeSingle();
       if (device != null) {
         deviceName = (device['name'] as String?) ?? deviceName;
+        devicePeerId = device['peer_id'] as String?;
         final ownerId = device['owner_id'] as String?;
         if (ownerId != null) {
           final profile = await KBSupabase.client
@@ -97,6 +99,7 @@ class _HelperHomePageState extends State<HelperHomePage> {
       ownerName: ownerName,
       ownerInitials: ownerInitials,
       deviceName: deviceName,
+      devicePeerId: devicePeerId,
     );
     _doorbellOpen = false;
   }
@@ -106,6 +109,7 @@ class _HelperHomePageState extends State<HelperHomePage> {
     required String ownerName,
     required String ownerInitials,
     required String deviceName,
+    String? devicePeerId,
   }) async {
     final action = await showModalBottomSheet<_DoorbellAction>(
       context: context,
@@ -128,6 +132,7 @@ class _HelperHomePageState extends State<HelperHomePage> {
             peerInitials: ownerInitials,
             peerDevice: deviceName,
             sessionId: sessionId,
+            devicePeerId: devicePeerId,
           ),
         ),
       );
@@ -414,6 +419,7 @@ class _FamilyMemberTileState extends State<_FamilyMemberTile> {
           peerInitials: device.ownerInitials,
           peerDevice: device.name,
           sessionId: sessionId,
+          devicePeerId: device.peerId,
         ),
       ),
     );

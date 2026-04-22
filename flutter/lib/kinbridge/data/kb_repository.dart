@@ -92,6 +92,7 @@ class FakeKBRepository implements KBRepository {
         name: "Pixel 8",
         platform: "android",
         lastSeen: now,
+        peerId: null,
       ),
       KBDevice(
         id: "device-dad",
@@ -100,6 +101,7 @@ class FakeKBRepository implements KBRepository {
         name: "Galaxy A54",
         platform: "android",
         lastSeen: now.subtract(const Duration(hours: 3)),
+        peerId: null,
       ),
       KBDevice(
         id: "device-james",
@@ -108,6 +110,7 @@ class FakeKBRepository implements KBRepository {
         name: "Pixel 7",
         platform: "android",
         lastSeen: now,
+        peerId: null,
       ),
     ];
   }

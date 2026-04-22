@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../common.dart' show gFFI;
+import '../../utils/image.dart' show ImagePainter;
 import '../data/kb_models.dart';
 import '../data/kb_realtime.dart';
 import '../data/kb_repository.dart';
 import '../data/kb_server_fn.dart';
 import '../theme/kb_tokens.dart';
 import '../widgets/kb_avatar.dart';
+import 'kb_remote_connection.dart';
 
 /// Live Session overlay (spec page 9).
 ///
@@ -29,6 +33,7 @@ class LiveSessionPage extends StatefulWidget {
     required this.peerInitials,
     this.peerDevice,
     this.sessionId,
+    this.devicePeerId,
   });
 
   final String peerName;
@@ -40,6 +45,13 @@ class LiveSessionPage extends StatefulWidget {
   /// writes through [kbSendChat]. When null, the page renders a static
   /// demo conversation (pre-Lovable-integration mode).
   final String? sessionId;
+
+  /// RustDesk `devices.peer_id` of the device being helped. When
+  /// present, the page initiates a [KBRemoteConnection] on mount and
+  /// the view surface renders live frames. Null means the device
+  /// hasn't completed install-token redemption (no agent registered)
+  /// and the surface shows the "waiting" placeholder.
+  final String? devicePeerId;
 
   @override
   State<LiveSessionPage> createState() => _LiveSessionPageState();
@@ -68,6 +80,16 @@ class _LiveSessionPageState extends State<LiveSessionPage> {
       setState(() => _elapsed = DateTime.now().difference(_start));
     });
     _hydrateChat();
+    _openRemoteConnection();
+  }
+
+  Future<void> _openRemoteConnection() async {
+    final pid = widget.devicePeerId;
+    if (pid == null || pid.isEmpty) return;
+    // Fire-and-forget: KBRemoteConnection flips its ValueNotifier as
+    // state changes, and _RemoteViewSurface subscribes to it. Any
+    // connect error surfaces through state=failed + errorMessage.
+    await KBRemoteConnection.instance.connect(peerId: pid);
   }
 
   Future<void> _hydrateChat() async {
@@ -123,6 +145,10 @@ class _LiveSessionPageState extends State<LiveSessionPage> {
     _chatSub?.cancel();
     _ticker?.cancel();
     _composer.dispose();
+    // Tear down the Rust-core session so a second LiveSessionPage push
+    // doesn't collide with a half-open peer handle. Safe to call when
+    // idle per KBRemoteConnection's contract.
+    KBRemoteConnection.instance.disconnect();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -395,6 +421,22 @@ class _SessionHeader extends StatelessWidget {
   }
 }
 
+/// Live remote-frame surface.
+///
+/// State machine per [KBRemoteConnection]:
+///   idle        → "waiting" placeholder (device agent not registered
+///                 or no peerId given on page open)
+///   connecting  → spinner + "Connecting to <peerDevice>…"
+///   connected   → live frame from `gFFI.imageModel.image`, painted via
+///                 RustDesk's `ImagePainter` inside a letterboxed
+///                 container. AnimatedBuilder listens to the
+///                 `ChangeNotifier` so every decoded frame triggers a
+///                 repaint.
+///   failed      → inline error + retry chip
+///
+/// v1 is view-only. Input forwarding (tap-through, scroll, keyboard)
+/// is deliberately deferred — the bulk of the product value is
+/// seeing the screen.
 class _RemoteViewSurface extends StatelessWidget {
   const _RemoteViewSurface({required this.peerDevice, required this.tool});
   final String? peerDevice;
@@ -402,9 +444,6 @@ class _RemoteViewSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Placeholder surface — Phase IV-b replaces with the RustDesk
-    // `remote_view` Flutter widget (`FlutterRemoteViewPage` in
-    // flutter/lib/mobile/pages/remote_page.dart).
     return Container(
       margin: const EdgeInsets.symmetric(vertical: KB.s3),
       decoration: BoxDecoration(
@@ -412,45 +451,46 @@ class _RemoteViewSurface extends StatelessWidget {
         borderRadius: BorderRadius.circular(KB.radiusCard),
         border: Border.all(color: KB.muted.withOpacity(0.25), width: 1),
       ),
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.phone_android_rounded,
-                    size: 48, color: KB.parchment.withOpacity(0.25)),
-                const SizedBox(height: KB.s3),
-                Text(
-                  peerDevice ?? "Waiting for remote screen…",
-                  style:
-                      KBText.body(color: KB.parchment.withOpacity(0.55)),
-                ),
-                const SizedBox(height: KB.s2),
-                Text(
-                  "Placeholder — remote view wires in Phase IV-b",
-                  style: KBText.caption(color: KB.muted),
-                ),
-              ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(KB.radiusCard),
+        child: Stack(
+          children: [
+            ValueListenableBuilder<KBRemoteState>(
+              valueListenable: KBRemoteConnection.instance.state,
+              builder: (context, st, _) {
+                switch (st) {
+                  case KBRemoteState.connected:
+                    return _LiveFrame(peerDevice: peerDevice);
+                  case KBRemoteState.connecting:
+                    return _ConnectingOverlay(peerDevice: peerDevice);
+                  case KBRemoteState.failed:
+                    return _FailedOverlay(
+                      peerDevice: peerDevice,
+                      message: KBRemoteConnection.instance.errorMessage,
+                    );
+                  case KBRemoteState.idle:
+                    return _IdleOverlay(peerDevice: peerDevice);
+                }
+              },
             ),
-          ),
-          Positioned(
-            top: KB.s3,
-            left: KB.s3,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: KB.s3, vertical: KB.s1),
-              decoration: BoxDecoration(
-                color: KB.deepInk.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(KB.radiusPill),
-              ),
-              child: Text(
-                _toolLabel(tool),
-                style: KBText.caption(color: KB.parchment),
+            Positioned(
+              top: KB.s3,
+              left: KB.s3,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: KB.s3, vertical: KB.s1),
+                decoration: BoxDecoration(
+                  color: KB.deepInk.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(KB.radiusPill),
+                ),
+                child: Text(
+                  _toolLabel(tool),
+                  style: KBText.caption(color: KB.parchment),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -466,6 +506,159 @@ class _RemoteViewSurface extends StatelessWidget {
       case _SessionTool.voice:
         return "Voice connected";
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// _RemoteViewSurface state overlays
+// ---------------------------------------------------------------------------
+
+/// The actual live remote frame. Subscribes to `gFFI.imageModel` via
+/// [AnimatedBuilder] so every decoded frame (the ChangeNotifier fires
+/// on each update) triggers a repaint through RustDesk's existing
+/// [ImagePainter]. Letterboxed inside the container with aspect
+/// preserved via FittedBox.
+class _LiveFrame extends StatelessWidget {
+  const _LiveFrame({required this.peerDevice});
+  final String? peerDevice;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: gFFI.imageModel,
+      builder: (context, _) {
+        final img = gFFI.imageModel.image;
+        if (img == null) {
+          return _ConnectingOverlay(peerDevice: peerDevice);
+        }
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Paint the decoded peer frame at its native pixel size
+            // inside a FittedBox so it letterboxes into the container
+            // without upscaling past 1:1.
+            return FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
+                width: img.width.toDouble(),
+                height: img.height.toDouble(),
+                child: CustomPaint(
+                  painter: ImagePainter(
+                    image: img,
+                    x: 0,
+                    y: 0,
+                    scale: 1.0,
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _ConnectingOverlay extends StatelessWidget {
+  const _ConnectingOverlay({required this.peerDevice});
+  final String? peerDevice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+                color: KB.amber, strokeWidth: 2.5),
+          ),
+          const SizedBox(height: KB.s4),
+          Text(
+            peerDevice != null
+                ? "Connecting to $peerDevice…"
+                : "Connecting to the remote screen…",
+            style: KBText.body(color: KB.parchment.withOpacity(0.7)),
+          ),
+          const SizedBox(height: KB.s2),
+          Text(
+            "End-to-end encrypted. Only you and ${peerDevice ?? 'the owner'} can see this.",
+            style: KBText.caption(color: KB.muted),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IdleOverlay extends StatelessWidget {
+  const _IdleOverlay({required this.peerDevice});
+  final String? peerDevice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(KB.s6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.phonelink_off_rounded,
+                size: 48, color: KB.parchment.withOpacity(0.25)),
+            const SizedBox(height: KB.s3),
+            Text(
+              peerDevice ?? "Remote screen not available yet",
+              style: KBText.body(color: KB.parchment.withOpacity(0.55)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: KB.s2),
+            Text(
+              "Waiting for the agent on the other side to come online.",
+              style: KBText.caption(color: KB.muted),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FailedOverlay extends StatelessWidget {
+  const _FailedOverlay({required this.peerDevice, this.message});
+  final String? peerDevice;
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(KB.s6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded,
+                size: 48, color: KB.coral.withOpacity(0.7)),
+            const SizedBox(height: KB.s3),
+            Text(
+              "Couldn't connect to $peerDevice",
+              style: KBText.body(color: KB.parchment),
+              textAlign: TextAlign.center,
+            ),
+            if (message != null && message!.isNotEmpty) ...[
+              const SizedBox(height: KB.s2),
+              Text(
+                message!,
+                style: KBText.caption(color: KB.muted),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
