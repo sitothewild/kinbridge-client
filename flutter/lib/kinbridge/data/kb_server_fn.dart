@@ -368,7 +368,15 @@ class KBServerFn {
     });
   }
 
-  /// Owner-side: register a device on their account. Returns the full row.
+  /// DEPRECATED — do not call. Lovable's `createDevice` endpoint is a
+  /// legacy owner-only path with no intended callers; it currently
+  /// returns 500 from every origin (Zod/TanStack request-decode
+  /// failure). The correct device-registration flow is
+  /// [issueInstallToken] (owner, authenticated) → [registerDevice]
+  /// (device side, unauthenticated, carries peer_id). Wrapper kept in
+  /// place only to document the contract and prevent an accidental
+  /// re-grep.
+  @Deprecated('Use issueInstallToken + registerDevice instead')
   static Future<Map<String, dynamic>> createDevice({
     required String name,
     String platform = 'android',

@@ -11,6 +11,7 @@
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/kb_models.dart';
 import '../data/kb_repository.dart';
@@ -53,11 +54,121 @@ class _DevicesPageState extends State<DevicesPage> {
     // model on Android ("Pixel 9") / iOS; fallback is generic.
     final suggestion = await _proposeDeviceName();
     if (!mounted) return;
-    final created = await showDialog<bool>(
+    final issued = await showDialog<_IssuedToken>(
       context: context,
       builder: (ctx) => _AddDeviceDialog(suggestedName: suggestion),
     );
-    if (created == true) await _refresh();
+    if (issued == null || !mounted) return;
+    await _showInstallShareDialog(issued);
+    // Device row doesn't exist until someone redeems the token on the
+    // target device, so no refresh here. The owner can pull to
+    // refresh once the install completes.
+  }
+
+  Future<void> _showInstallShareDialog(_IssuedToken issued) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: KB.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(KB.radiusCard),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(KB.s5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("SET UP ${issued.name.toUpperCase()}",
+                  style: KBText.overline()),
+              const SizedBox(height: KB.s2),
+              Text("Install link ready", style: KBText.title()),
+              const SizedBox(height: KB.s3),
+              Text(
+                "Open this link on the device you're setting up, or enter the code during first-launch onboarding. KinBridge registers it under your account.",
+                style: KBText.body(color: KB.muted),
+              ),
+              const SizedBox(height: KB.s5),
+              if (issued.installCode.isNotEmpty) ...[
+                Text("OR ENTER CODE",
+                    style: KBText.overline(color: KB.muted)),
+                const SizedBox(height: KB.s2),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: KB.s4, vertical: KB.s3),
+                  decoration: BoxDecoration(
+                    color: KB.parchment,
+                    borderRadius: BorderRadius.circular(KB.radiusField),
+                    border: Border.all(color: KB.hairline, width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          issued.installCode,
+                          style: KBText.title().copyWith(
+                            fontFamily: 'monospace',
+                            letterSpacing: 4,
+                          ),
+                        ),
+                      ),
+                      _CopyIcon(text: issued.installCode),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: KB.s4),
+              ],
+              Text("LINK", style: KBText.overline(color: KB.muted)),
+              const SizedBox(height: KB.s2),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: KB.s4, vertical: KB.s3),
+                decoration: BoxDecoration(
+                  color: KB.parchment,
+                  borderRadius: BorderRadius.circular(KB.radiusField),
+                  border: Border.all(color: KB.hairline, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        issued.installUrl,
+                        style: KBText.caption(color: KB.deepInk),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    _CopyIcon(text: issued.installUrl),
+                  ],
+                ),
+              ),
+              if (issued.expiresAt != null) ...[
+                const SizedBox(height: KB.s3),
+                Text("Expires ${_relativeFuture(issued.expiresAt!)}",
+                    style: KBText.caption(color: KB.muted)),
+              ],
+              const SizedBox(height: KB.s5),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text("Done",
+                      style: KBText.label(color: KB.amber)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _relativeFuture(DateTime t) {
+    final diff = t.difference(DateTime.now());
+    if (diff.isNegative) return "already";
+    if (diff.inMinutes < 1) return "in under a minute";
+    if (diff.inHours < 1) return "in ${diff.inMinutes} minutes";
+    if (diff.inDays < 1) return "in ${diff.inHours} hours";
+    return "in ${diff.inDays} days";
   }
 
   Future<void> _openDetail(KBDevice device) async {
@@ -136,7 +247,7 @@ class _EmptyState extends StatelessWidget {
         Text("Your paired phones & tablets", style: KBText.title()),
         const SizedBox(height: KB.s3),
         Text(
-          "Register a device so helpers can see it and jump in when you ask for help. Start with this phone — give it a name your family will recognize.",
+          "Add a phone or tablet so helpers can see it and jump in when you ask for help. We'll give you a short install link to open on the device you're setting up.",
           style: KBText.body(color: KB.muted),
         ),
         const SizedBox(height: KB.s6),
@@ -163,7 +274,7 @@ class _EmptyState extends StatelessWidget {
               ),
               const SizedBox(height: KB.s3),
               Text(
-                "Give it a friendly name — \"Mom's phone\" or \"Living room tablet\" — so helpers know what they're connecting to.",
+                "Give it a friendly name — \"Mom's phone\" or \"Living room tablet\" — and we'll issue an install link to open on it.",
                 style: KBText.body(color: KB.muted),
               ),
               const SizedBox(height: KB.s4),
@@ -184,7 +295,7 @@ class _EmptyState extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text("Add device",
+                            Text("Set up a device",
                                 style: KBText.label(color: KB.surface)),
                             const SizedBox(width: KB.s2),
                             const Icon(Icons.arrow_forward_rounded,
@@ -337,6 +448,41 @@ class _DeviceCard extends StatelessWidget {
   }
 }
 
+/// Small inline copy-to-clipboard icon used inside share dialogs.
+class _CopyIcon extends StatefulWidget {
+  const _CopyIcon({required this.text});
+  final String text;
+
+  @override
+  State<_CopyIcon> createState() => _CopyIconState();
+}
+
+class _CopyIconState extends State<_CopyIcon> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: _copy,
+      tooltip: _copied ? "Copied" : "Copy",
+      icon: Icon(
+        _copied ? Icons.check_rounded : Icons.content_copy_rounded,
+        color: _copied ? KB.sage : KB.amber,
+        size: 18,
+      ),
+    );
+  }
+}
+
 class _AddFab extends StatelessWidget {
   const _AddFab({required this.onTap});
   final VoidCallback onTap;
@@ -368,7 +514,7 @@ class _AddFab extends StatelessWidget {
               children: [
                 Icon(Icons.add_rounded, color: KB.surface, size: 20),
                 SizedBox(width: KB.s2),
-                Text("Add device",
+                Text("Set up a device",
                     style: TextStyle(
                         color: KB.surface,
                         fontWeight: FontWeight.w600,
@@ -383,8 +529,32 @@ class _AddFab extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Add dialog — name + platform picker, calls KBServerFn.createDevice
+// Add dialog — name + platform picker, calls KBServerFn.issueInstallToken
+// and returns the issued token so the caller can present an install-link
+// share dialog. Does NOT insert a devices row directly — per Lovable the
+// correct flow is install-token → registerDevice (unauthenticated, run on
+// the device being set up, carries peer_id). The createDevice endpoint
+// exists but is legacy/owner-only and currently returns 500 from any
+// caller — we no longer reach for it.
 // ---------------------------------------------------------------------------
+
+/// Return type of [_AddDeviceDialog] when the owner successfully
+/// issues an install token. The [DevicesPage] shows a follow-up
+/// share dialog using these values.
+class _IssuedToken {
+  _IssuedToken({
+    required this.name,
+    required this.platform,
+    required this.installUrl,
+    required this.installCode,
+    required this.expiresAt,
+  });
+  final String name;
+  final String platform;
+  final String installUrl;
+  final String installCode;
+  final DateTime? expiresAt;
+}
 
 class _AddDeviceDialog extends StatefulWidget {
   const _AddDeviceDialog({this.suggestedName});
@@ -418,45 +588,42 @@ class _AddDeviceDialogState extends State<_AddDeviceDialog> {
       _busy = true;
       _error = null;
     });
-    // Preferred path: Lovable's createDevice server-fn, which can run
-    // any side effects (default preferences, audit logging, etc.)
-    // server-side. On 500 / network error we fall through to a direct
-    // Supabase insert — RLS policy "Owners manage their devices"
-    // covers `INSERT WITH CHECK (owner_id = auth.uid())` so the write
-    // succeeds for the caller's own rows. Lovable is chasing the 500
-    // root cause separately; the fallback stops us from being blocked.
+    // "Add device" → issue an install token and show the URL + 6-digit
+    // code for the owner to open on the device they're setting up.
+    // This matches the Lovable model: createDevice is an authenticated
+    // owner-only legacy path with no intended callers; the correct
+    // route is issueInstallToken → registerDevice (unauthenticated,
+    // run on the device being installed, carries peer_id).
+    //
+    // For "set up THIS phone as my device" on a single emulator, the
+    // owner can copy the install code and enter it locally via the
+    // Connect Code screen — same flow a fresh install would take.
     try {
-      await KBServerFn.createDevice(name: name, platform: _platform);
+      final result = await KBServerFn.issueInstallToken(
+        proposedName: name,
+        proposedPlatform: _platform,
+      );
       if (!mounted) return;
-      Navigator.of(context).pop(true);
-      return;
-    } catch (err) {
-      debugPrint('kb.devices: createDevice server-fn failed ($err) — '
-          'falling back to direct Supabase insert');
-    }
-
-    try {
-      final uid = KBSupabase.userId;
-      if (uid == null) {
-        if (!mounted) return;
-        setState(() {
-          _busy = false;
-          _error = "Sign in again to register a device.";
-        });
-        return;
-      }
-      await KBSupabase.client.from('devices').insert({
-        'owner_id': uid,
-        'name': name,
-        'platform': _platform,
-      });
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (err) {
+      Navigator.of(context).pop(_IssuedToken(
+        name: name,
+        platform: _platform,
+        installUrl: result.installUrl,
+        installCode: result.installCode,
+        expiresAt: result.expiresAt,
+      ));
+    } on KBServerFnError catch (err) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = "Couldn't register the device. $err";
+        _error = err.message.isEmpty
+            ? "Couldn't create the install link. Try again."
+            : err.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = "Couldn't create the install link. Try again.";
       });
     }
   }
@@ -476,10 +643,10 @@ class _AddDeviceDialogState extends State<_AddDeviceDialog> {
           children: [
             Text("NEW DEVICE", style: KBText.overline()),
             const SizedBox(height: KB.s2),
-            Text("Register a phone or tablet", style: KBText.title()),
+            Text("Set up a phone or tablet", style: KBText.title()),
             const SizedBox(height: KB.s3),
             Text(
-              "Pick a name helpers will recognize. You can rename it later.",
+              "Pick a name helpers will recognize, and we'll generate an install link to open on the device you're setting up.",
               style: KBText.body(color: KB.muted),
             ),
             const SizedBox(height: KB.s5),
@@ -582,7 +749,7 @@ class _AddDeviceDialogState extends State<_AddDeviceDialog> {
                                 height: 18,
                                 child: CircularProgressIndicator(
                                     color: KB.muted, strokeWidth: 2))
-                            : Text("Add",
+                            : Text("Generate install link",
                                 style: KBText.label(color: KB.surface)),
                       ),
                     ),
